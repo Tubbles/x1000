@@ -1,0 +1,12 @@
+{
+    "files.associations": {
+        "*.bb": "bitbake",
+        "*.bbappend": "bitbake",
+        "*.inc": "python",
+        "*.ln": "linkerscript",
+        "*.tt": "csharp",
+        "*.m": "matlab",
+        "*.json": "jsonc",
+        "string": "cpp"
+    }
+}

@@ -15,7 +15,7 @@ class helloRecipe(ConanFile):
 
     settings = "os", "compiler", "build_type", "arch"
     requires = [
-        "fmt/8.1.1",
-        "sdl/2.0.20",
+        # "fmt/8.1.1",
+        # "sdl/2.0.20",
     ]
     generators = "cmake", "gcc", "txt"

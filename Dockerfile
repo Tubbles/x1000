@@ -53,6 +53,22 @@ RUN set -x ; wget -O "su-exec-0.2.tar.gz" "https://github.com/ncopa/su-exec/arch
 
 ENV PS1='\u@\h \w\n\$ '
 
+RUN pacman -S --noconfirm --needed libxft
+
+# TODO : Does not seem to work
+RUN passwd -d root
+
+RUN pacman -S --noconfirm --needed vim
+
+RUN sed -i 's,^PS1=.*$,PS1="\\u@\\h \\w\\n\$ ",g' /etc/bash.bashrc
+
+RUN pacman -S --noconfirm --needed sdl2
+RUN pacman -S --noconfirm --needed fmt
+RUN pacman -S --noconfirm --needed sdl2_ttf
+
+COPY entrypoint.sh /root
+ENTRYPOINT ["./entrypoint.sh"]
+
 # FROM alpine:3.16.0 AS x1000
 
 # RUN apk add build-base
