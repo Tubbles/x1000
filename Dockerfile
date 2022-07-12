@@ -66,6 +66,9 @@ RUN pacman -S --noconfirm --needed sdl2
 RUN pacman -S --noconfirm --needed fmt
 RUN pacman -S --noconfirm --needed sdl2_ttf
 
+RUN pacman -S --noconfirm --needed catch2
+RUN pacman -S --noconfirm --needed spdlog
+
 COPY entrypoint.sh /root
 ENTRYPOINT ["./entrypoint.sh"]
 

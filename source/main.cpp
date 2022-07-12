@@ -1,22 +1,38 @@
 #include "globals.hpp"
+#include "nes/nes.hpp"
 #include "render.hpp"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 #include <chrono>
 #include <fmt/core.h>
 #include <numeric>
+#include <spdlog/spdlog.h>
 #include <vector>
 
 auto get_current_time = std::chrono::steady_clock::now;
-using delta_time = std::chrono::duration<float>;
+using delta_time      = std::chrono::duration<float>;
+
+constexpr uint8_t cr(uint32_t color_32bit) {
+    return (color_32bit & 0x00FF0000) >> 16;
+}
+
+constexpr uint8_t cg(uint32_t color_32bit) {
+    return (color_32bit & 0x0000FF00) >> 8;
+}
+
+constexpr uint8_t cb(uint32_t color_32bit) {
+    return color_32bit & 0x000000FF;
+}
 
 int main(int argc, char *argv[]) {
     (void)argc;
     (void)argv;
-    SDL_Event event;
+    SDL_Event     event;
     SDL_Renderer *renderer = NULL;
-    SDL_Window *window = NULL;
-    int width, height, frame_count = 0;
+    SDL_Window   *window   = NULL;
+    int           width, height, frame_count = 0;
+
+    spdlog::set_level(spdlog::level::debug); // Set global log level
 
     SDL_Init(SDL_INIT_EVERYTHING);
     TTF_Init();
@@ -32,16 +48,32 @@ int main(int argc, char *argv[]) {
 
     // SDL_ShowCursor(false);
 
-    bool running = true;
-    int return_code = 0;
+    bool                    running     = true;
+    int                     return_code = 0;
     std::vector<delta_time> frame_times;
-    float fps = 0.0f;
+    float                   fps = 0.0f;
 
     auto total_time = get_current_time();
+
+    constexpr const uint32_t color_palette[] = {
+        0x000000, 0xFFFFFF, 0x880000, 0xAAFFEE, 0xCC44CC, 0x00CC55, 0x0000AA, 0xEEEE77,
+        0xDD8855, 0x664400, 0xFF7777, 0x333333, 0x777777, 0xAAFF66, 0x0088FF, 0xBBBBBB,
+    };
+
+    NES nes;
+    nes.cycle();
+    nes.cycle();
+    nes.cycle();
+    nes.cycle();
+    nes.cycle();
+    nes.cycle();
+    nes.cycle();
+    nes.cycle();
+
     while (running) {
         auto new_total_time = get_current_time();
-        auto delta_time = new_total_time - total_time;
-        total_time = new_total_time;
+        auto delta_time     = new_total_time - total_time;
+        total_time          = new_total_time;
 
         frame_times.push_back(delta_time);
         constexpr int num_frames_window = 60;
@@ -73,6 +105,12 @@ int main(int argc, char *argv[]) {
 
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         SDL_RenderClear(renderer);
+        for (size_t stack_counter = 0x01FF; stack_counter >= 0x0100; stack_counter -= 1) {
+            auto color_index = nes.ram_backend[stack_counter];
+            SDL_SetRenderDrawColor(renderer, cr(color_palette[color_index]), cg(color_palette[color_index]),
+                                   cb(color_palette[color_index]), 255);
+            render_pixel({(int)(stack_counter % 16), (int)(stack_counter / 16)}, *renderer);
+        }
         SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
         render_pixel({(frame_count * 2) % (width / pixel_size), (frame_count) % (height / pixel_size)}, *renderer);
         render_pixel({100, 100}, *renderer);

@@ -6,19 +6,28 @@ AccessModifierOffset: -4
 # AlignAfterOpenBracket: Align
 # AlignArrayOfStructures: None
 # AlignConsecutiveMacros: None
+AlignConsecutiveMacros: Consecutive
 # AlignConsecutiveAssignments: None
+AlignConsecutiveAssignments: Consecutive
 # AlignConsecutiveBitFields: None
+AlignConsecutiveBitFields: Consecutive
 # AlignConsecutiveDeclarations: None
+AlignConsecutiveDeclarations: Consecutive
 # AlignEscapedNewlines: Right
 # AlignOperands:   Align
 # AlignTrailingComments: true
 # AllowAllArgumentsOnNextLine: true
+AllowAllArgumentsOnNextLine: false
 # AllowAllParametersOfDeclarationOnNextLine: true
+AllowAllParametersOfDeclarationOnNextLine: false
 # AllowShortEnumsOnASingleLine: true
+AllowShortEnumsOnASingleLine: false
 # AllowShortBlocksOnASingleLine: Never
 # AllowShortCaseLabelsOnASingleLine: false
 # AllowShortFunctionsOnASingleLine: All
+AllowShortFunctionsOnASingleLine: None
 # AllowShortLambdasOnASingleLine: All
+AllowShortLambdasOnASingleLine: None
 # AllowShortIfStatementsOnASingleLine: Never
 # AllowShortLoopsOnASingleLine: false
 # AlwaysBreakAfterDefinitionReturnType: None

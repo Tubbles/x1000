@@ -1,155 +1,193 @@
 #pragma once
 
+#include "chip.hpp"
+#include "mem.hpp"
+#include "source/bus.hpp"
 #include <cstdint>
+#include <fmt/core.h>
+#include <optional>
 
 namespace cpu {
-
-// Mnemonics
-inline constexpr char *ADC = "ADC";
-inline constexpr char *AND = "AND";
-inline constexpr char *ASL = "ASL";
-inline constexpr char *BCC = "BCC";
-inline constexpr char *BCS = "BCS";
-inline constexpr char *BEQ = "BEQ";
-inline constexpr char *BIT = "BIT";
-inline constexpr char *BMI = "BMI";
-inline constexpr char *BNE = "BNE";
-inline constexpr char *BPL = "BPL";
-inline constexpr char *BRK = "BRK";
-inline constexpr char *BVC = "BVC";
-inline constexpr char *BVS = "BVS";
-inline constexpr char *CLC = "CLC";
-inline constexpr char *CLD = "CLD";
-inline constexpr char *CLI = "CLI";
-inline constexpr char *CLV = "CLV";
-inline constexpr char *CMP = "CMP";
-inline constexpr char *CPX = "CPX";
-inline constexpr char *CPY = "CPY";
-inline constexpr char *DEC = "DEC";
-inline constexpr char *DEX = "DEX";
-inline constexpr char *DEY = "DEY";
-inline constexpr char *EOR = "EOR";
-inline constexpr char *INC = "INC";
-inline constexpr char *INX = "INX";
-inline constexpr char *INY = "INY";
-inline constexpr char *JMP = "JMP";
-inline constexpr char *JSR = "JSR";
-inline constexpr char *LDA = "LDA";
-inline constexpr char *LDX = "LDX";
-inline constexpr char *LDY = "LDY";
-inline constexpr char *LSR = "LSR";
-inline constexpr char *NOP = "NOP";
-inline constexpr char *ORA = "ORA";
-inline constexpr char *PHA = "PHA";
-inline constexpr char *PHP = "PHP";
-inline constexpr char *PLA = "PLA";
-inline constexpr char *PLP = "PLP";
-inline constexpr char *ROL = "ROL";
-inline constexpr char *ROR = "ROR";
-inline constexpr char *RTI = "RTI";
-inline constexpr char *RTS = "RTS";
-inline constexpr char *SBC = "SBC";
-inline constexpr char *SEC = "SEC";
-inline constexpr char *SED = "SED";
-inline constexpr char *SEI = "SEI";
-inline constexpr char *STA = "STA";
-inline constexpr char *STX = "STX";
-inline constexpr char *STY = "STY";
-inline constexpr char *TAX = "TAX";
-inline constexpr char *TAY = "TAY";
-inline constexpr char *TSX = "TSX";
-inline constexpr char *TXA = "TXA";
-inline constexpr char *TXS = "TXS";
-inline constexpr char *TYA = "TYA";
-
 enum {
     // Non-Indexed, non memory
-    ACCUMULATOR,
-    IMMEDIATE,
-    IMPLIED,
+    ACCUMULATOR, // Num arg bytes: 1, num clock cycles: 2
+    IMMEDIATE,   // Num arg bytes: 2, num clock cycles: 2
+    IMPLIED,     // Num arg bytes: 2, num clock cycles: differs
 
     // Non-Indexed memory ops
-    RELATIVE,
-    ABSOLUTE,
-    ZERO_PAGE,
-    INDIRECT,
+    RELATIVE,  // Num arg bytes: 2, num clock cycles: 2
+    ABSOLUTE,  // Num arg bytes: 3, num clock cycles: differs
+    ZERO_PAGE, // Num arg bytes: 2, num clock cycles: differs
+    INDIRECT,  // Num arg bytes: 3, num clock cycles: 5
 
     // Indexed memory ops
-    ABSOLUTE_X,
-    ABSOLUTE_Y,
-    ZERO_PAGE_X,
-    ZERO_PAGE_Y,
-    X_INDIRECT,
-    INDIRECT_Y,
+    ABSOLUTE_X,  // Num arg bytes: 3, num clock cycles: differs
+    ABSOLUTE_Y,  // Num arg bytes: 3, num clock cycles: differs
+    ZERO_PAGE_X, // Num arg bytes: 2, num clock cycles: differs
+    ZERO_PAGE_Y, // Num arg bytes: 2, num clock cycles: 4
+    X_INDIRECT,  // Num arg bytes: 2, num clock cycles: 6
+    INDIRECT_Y,  // Num arg bytes: 2, num clock cycles: differs
 };
-
-typedef void (*opcode_callback)(Instruction instruction);
 
 struct Instruction {
-    const char *mnemonic = nullptr;
-    uint8_t code = 0;
-    uint8_t addr_mode = IMPLIED;
-    opcode_callback callback = nullptr;
-    uint8_t length = 0;
-    uint8_t cycles = 0;
-    bool extra_cycle_on_cross_boundary = false;
+    const char *mnemonic                      = nullptr;
+    uint8_t     opcode                        = 0;
+    uint8_t     addr_mode                     = IMPLIED;
+    uint8_t     num_args                      = 0;
+    uint8_t     cycles                        = 0;
+    bool        extra_cycle_on_cross_boundary = false;
+
+    static std::optional<Instruction> decode(uint8_t opcode);
 };
 
-inline constexpr Instruction instructions[] = {
+struct Obj {
+    enum class State {
+        RESET,
+        RUN,
+        HALT,
+    };
+    BusHarness address_bus;
+    BusHarness data_bus;
+    BusHarness write_signal;
+
+    cpumem::Registers &registers;
+    State              state            = State::RESET;
+    size_t             subcycle_counter = 0;
+    uint8_t            buffer[4];
+    size_t             cycle_count;
+
+    std::optional<Instruction> current_instruction = std::nullopt;
+
+    Obj(cpumem::Registers &registers) : address_bus("cpu"), data_bus("cpu"), write_signal("cpu"), registers(registers) {
+    }
+
+    void reset() {
+        state            = State::RESET;
+        subcycle_counter = 0;
+        buffer[0]        = 0;
+        buffer[1]        = 0;
+        buffer[2]        = 0;
+        buffer[3]        = 0;
+        cycle_count      = 0;
+        current_instruction.reset();
+    }
+
+    void cycle();
+};
+
+// Mnemonics
+inline constexpr const char *ADC = "ADC";
+inline constexpr const char *AND = "AND";
+inline constexpr const char *ASL = "ASL";
+inline constexpr const char *BCC = "BCC";
+inline constexpr const char *BCS = "BCS";
+inline constexpr const char *BEQ = "BEQ";
+inline constexpr const char *BIT = "BIT";
+inline constexpr const char *BMI = "BMI";
+inline constexpr const char *BNE = "BNE";
+inline constexpr const char *BPL = "BPL";
+inline constexpr const char *BRK = "BRK";
+inline constexpr const char *BVC = "BVC";
+inline constexpr const char *BVS = "BVS";
+inline constexpr const char *CLC = "CLC";
+inline constexpr const char *CLD = "CLD";
+inline constexpr const char *CLI = "CLI";
+inline constexpr const char *CLV = "CLV";
+inline constexpr const char *CMP = "CMP";
+inline constexpr const char *CPX = "CPX";
+inline constexpr const char *CPY = "CPY";
+inline constexpr const char *DEC = "DEC";
+inline constexpr const char *DEX = "DEX";
+inline constexpr const char *DEY = "DEY";
+inline constexpr const char *EOR = "EOR";
+inline constexpr const char *INC = "INC";
+inline constexpr const char *INX = "INX";
+inline constexpr const char *INY = "INY";
+inline constexpr const char *JMP = "JMP";
+inline constexpr const char *JSR = "JSR";
+inline constexpr const char *LDA = "LDA";
+inline constexpr const char *LDX = "LDX";
+inline constexpr const char *LDY = "LDY";
+inline constexpr const char *LSR = "LSR";
+inline constexpr const char *NOP = "NOP";
+inline constexpr const char *ORA = "ORA";
+inline constexpr const char *PHA = "PHA";
+inline constexpr const char *PHP = "PHP";
+inline constexpr const char *PLA = "PLA";
+inline constexpr const char *PLP = "PLP";
+inline constexpr const char *ROL = "ROL";
+inline constexpr const char *ROR = "ROR";
+inline constexpr const char *RTI = "RTI";
+inline constexpr const char *RTS = "RTS";
+inline constexpr const char *SBC = "SBC";
+inline constexpr const char *SEC = "SEC";
+inline constexpr const char *SED = "SED";
+inline constexpr const char *SEI = "SEI";
+inline constexpr const char *STA = "STA";
+inline constexpr const char *STX = "STX";
+inline constexpr const char *STY = "STY";
+inline constexpr const char *TAX = "TAX";
+inline constexpr const char *TAY = "TAY";
+inline constexpr const char *TSX = "TSX";
+inline constexpr const char *TXA = "TXA";
+inline constexpr const char *TXS = "TXS";
+inline constexpr const char *TYA = "TYA";
+
+inline constexpr const Instruction instructions[] = {
     // ADC (ADd with Carry)
     // Affects Flags: N V Z C
     // ADC results are dependant on the setting of the decimal flag. In decimal mode, addition is carried out on the
     // assumption that the values involved are packed BCD (Binary Coded Decimal).
     // There is no way to add without carry.
     // Immediate     ADC #$44      $69  2   2
-    {ADC, 0x69, IMMEDIATE, nullptr, 2, 2},
+    {ADC, 0x69, IMMEDIATE, 2, 2},
     // Zero Page     ADC $44       $65  2   3
-    {ADC, 0x65, ZERO_PAGE, nullptr, 2, 3},
+    {ADC, 0x65, ZERO_PAGE, 2, 3},
     // Zero Page,X   ADC $44,X     $75  2   4
-    {ADC, 0x75, ZERO_PAGE_X, nullptr, 2, 4},
+    {ADC, 0x75, ZERO_PAGE_X, 2, 4},
     // Absolute      ADC $4400     $6D  3   4
-    {ADC, 0x6D, ABSOLUTE, nullptr, 3, 4},
+    {ADC, 0x6D, ABSOLUTE, 3, 4},
     // Absolute,X    ADC $4400,X   $7D  3   4+
-    {ADC, 0x7D, ABSOLUTE_X, nullptr, 3, 4, true},
+    {ADC, 0x7D, ABSOLUTE_X, 3, 4, true},
     // Absolute,Y    ADC $4400,Y   $79  3   4+
-    {ADC, 0x79, ABSOLUTE_Y, nullptr, 3, 4, true},
+    {ADC, 0x79, ABSOLUTE_Y, 3, 4, true},
     // Indirect,X    ADC ($44,X)   $61  2   6
-    {ADC, 0x61, X_INDIRECT, nullptr, 2, 6},
+    {ADC, 0x61, X_INDIRECT, 2, 6},
     // Indirect,Y    ADC ($44),Y   $71  2   5+
-    {ADC, 0x71, INDIRECT_Y, nullptr, 2, 5, true},
+    {ADC, 0x71, INDIRECT_Y, 2, 5, true},
 
     // AND (bitwise AND with accumulator)
     // Affects Flags: N Z
     // Immediate     AND #$44      $29  2   2
-    {AND, 0x29, IMMEDIATE, nullptr, 2, 2},
+    {AND, 0x29, IMMEDIATE, 2, 2},
     // Zero Page     AND $44       $25  2   3
-    {AND, 0x25, ZERO_PAGE, nullptr, 2, 3},
+    {AND, 0x25, ZERO_PAGE, 2, 3},
     // Zero Page,X   AND $44,X     $35  2   4
-    {AND, 0x35, ZERO_PAGE_X, nullptr, 2, 4},
+    {AND, 0x35, ZERO_PAGE_X, 2, 4},
     // Absolute      AND $4400     $2D  3   4
-    {AND, 0x2D, ABSOLUTE, nullptr, 3, 4},
+    {AND, 0x2D, ABSOLUTE, 3, 4},
     // Absolute,X    AND $4400,X   $3D  3   4+
-    {AND, 0x3D, ABSOLUTE_X, nullptr, 3, 4, true},
+    {AND, 0x3D, ABSOLUTE_X, 3, 4, true},
     // Absolute,Y    AND $4400,Y   $39  3   4+
-    {AND, 0x39, ABSOLUTE_Y, nullptr, 3, 4, true},
+    {AND, 0x39, ABSOLUTE_Y, 3, 4, true},
     // Indirect,X    AND ($44,X)   $21  2   6
-    {AND, 0x21, X_INDIRECT, nullptr, 2, 6},
+    {AND, 0x21, X_INDIRECT, 2, 6},
     // Indirect,Y    AND ($44),Y   $31  2   5+
-    {AND, 0x31, INDIRECT_Y, nullptr, 2, 5, true},
+    {AND, 0x31, INDIRECT_Y, 2, 5, true},
 
     // ASL (Arithmetic Shift Left)
     // Affects Flags: N Z C
     // ASL shifts all bits left one position. 0 is shifted into bit 0 and the original bit 7 is shifted into the Carry.
     // Accumulator   ASL A         $0A  1   2
-    {ASL, 0x0A, ACCUMULATOR, nullptr, 1, 2},
+    {ASL, 0x0A, ACCUMULATOR, 1, 2},
     // Zero Page     ASL $44       $06  2   5
-    {ASL, 0x06, ZERO_PAGE, nullptr, 2, 5},
+    {ASL, 0x06, ZERO_PAGE, 2, 5},
     // Zero Page,X   ASL $44,X     $16  2   6
-    {ASL, 0x16, ZERO_PAGE_X, nullptr, 2, 6},
+    {ASL, 0x16, ZERO_PAGE_X, 2, 6},
     // Absolute      ASL $4400     $0E  3   6
-    {ASL, 0x0E, ABSOLUTE, nullptr, 3, 6},
+    {ASL, 0x0E, ABSOLUTE, 3, 6},
     // Absolute,X    ASL $4400,X   $1E  3   7
-    {ASL, 0x1E, ABSOLUTE_X, nullptr, 3, 7},
+    {ASL, 0x1E, ABSOLUTE_X, 3, 7},
 
     // BIT (test BITs)
     // Affects Flags: N V Z
@@ -166,9 +204,9 @@ inline constexpr Instruction instructions[] = {
     // Beware: a BIT instruction used in this way as a NOP does have effects: the flags may be modified, and the read of
     // the absolute address, if it happens to access an I/O device, may cause an unwanted action.
     // Zero Page     BIT $44       $24  2   3
-    {BIT, 0x24, ZERO_PAGE, nullptr, 2, 3},
+    {BIT, 0x24, ZERO_PAGE, 2, 3},
     // Absolute      BIT $4400     $2C  3   4
-    {BIT, 0x2C, ABSOLUTE, nullptr, 3, 4},
+    {BIT, 0x2C, ABSOLUTE, 3, 4},
 
     // Branch Instructions
     // Affect Flags: none
@@ -192,21 +230,21 @@ inline constexpr Instruction instructions[] = {
     //   LABEL NOP
     // the BVC instruction will take 3 cycles no matter what address it is located at.
     // BPL (Branch on PLus)           $10
-    {BPL, 0x10, RELATIVE, nullptr, 2, 2},
+    {BPL, 0x10, RELATIVE, 2, 2},
     // BMI (Branch on MInus)          $30
-    {BMI, 0x30, RELATIVE, nullptr, 2, 2},
+    {BMI, 0x30, RELATIVE, 2, 2},
     // BVC (Branch on oVerflow Clear) $50
-    {BVC, 0x50, RELATIVE, nullptr, 2, 2},
+    {BVC, 0x50, RELATIVE, 2, 2},
     // BVS (Branch on oVerflow Set)   $70
-    {BVS, 0x70, RELATIVE, nullptr, 2, 2},
+    {BVS, 0x70, RELATIVE, 2, 2},
     // BCC (Branch on Carry Clear)    $90
-    {BCC, 0x90, RELATIVE, nullptr, 2, 2},
+    {BCC, 0x90, RELATIVE, 2, 2},
     // BCS (Branch on Carry Set)      $B0
-    {BCS, 0xB0, RELATIVE, nullptr, 2, 2},
+    {BCS, 0xB0, RELATIVE, 2, 2},
     // BNE (Branch on Not Equal)      $D0
-    {BNE, 0xD0, RELATIVE, nullptr, 2, 2},
+    {BNE, 0xD0, RELATIVE, 2, 2},
     // BEQ (Branch on EQual)          $F0
-    {BEQ, 0xF0, RELATIVE, nullptr, 2, 2},
+    {BEQ, 0xF0, RELATIVE, 2, 2},
 
     // BRK (BReaK)
     // Affects Flags: B
@@ -214,7 +252,7 @@ inline constexpr Instruction instructions[] = {
     // address of the BRK +2 so that BRK may be used to replace a two-byte instruction for debugging and the subsequent
     // RTI will be correct.
     // Implied       BRK           $00  1   7
-    {BRK, 0x00, IMPLIED, nullptr, 1, 7},
+    {BRK, 0x00, IMPLIED, 1, 7},
 
     // CMP (CoMPare accumulator)
     // Affects Flags: N Z C
@@ -222,71 +260,71 @@ inline constexpr Instruction instructions[] = {
     // than the compared value, the Carry will be set. The equal (Z) and negative (N) flags will be set based on
     // equality or lack thereof and the sign (i.e. A>=$80) of the accumulator.
     // Immediate     CMP #$44      $C9  2   2
-    {CMP, 0xC9, IMMEDIATE, nullptr, 2, 2},
+    {CMP, 0xC9, IMMEDIATE, 2, 2},
     // Zero Page     CMP $44       $C5  2   3
-    {CMP, 0xC5, ZERO_PAGE, nullptr, 2, 3},
+    {CMP, 0xC5, ZERO_PAGE, 2, 3},
     // Zero Page,X   CMP $44,X     $D5  2   4
-    {CMP, 0xD5, ZERO_PAGE_X, nullptr, 2, 4},
+    {CMP, 0xD5, ZERO_PAGE_X, 2, 4},
     // Absolute      CMP $4400     $CD  3   4
-    {CMP, 0xCD, ABSOLUTE, nullptr, 3, 4},
+    {CMP, 0xCD, ABSOLUTE, 3, 4},
     // Absolute,X    CMP $4400,X   $DD  3   4+
-    {CMP, 0xDD, ABSOLUTE_X, nullptr, 3, 4, true},
+    {CMP, 0xDD, ABSOLUTE_X, 3, 4, true},
     // Absolute,Y    CMP $4400,Y   $D9  3   4+
-    {CMP, 0xD9, ABSOLUTE_Y, nullptr, 3, 4, true},
+    {CMP, 0xD9, ABSOLUTE_Y, 3, 4, true},
     // Indirect,X    CMP ($44,X)   $C1  2   6
-    {CMP, 0xC1, X_INDIRECT, nullptr, 2, 6},
+    {CMP, 0xC1, X_INDIRECT, 2, 6},
     // Indirect,Y    CMP ($44),Y   $D1  2   5+
-    {CMP, 0xD1, INDIRECT_Y, nullptr, 2, 5, true},
+    {CMP, 0xD1, INDIRECT_Y, 2, 5, true},
 
     // CPX (ComPare X register)
     // Affects Flags: N Z C
     // Operation and flag results are identical to equivalent mode accumulator CMP ops.
     // Immediate     CPX #$44      $E0  2   2
-    {CPX, 0xE0, IMMEDIATE, nullptr, 2, 2},
+    {CPX, 0xE0, IMMEDIATE, 2, 2},
     // Zero Page     CPX $44       $E4  2   3
-    {CPX, 0xE4, ZERO_PAGE, nullptr, 2, 3},
+    {CPX, 0xE4, ZERO_PAGE, 2, 3},
     // Absolute      CPX $4400     $EC  3   4
-    {CPX, 0xEC, ABSOLUTE, nullptr, 3, 4},
+    {CPX, 0xEC, ABSOLUTE, 3, 4},
 
     // CPY (ComPare Y register)
     // Affects Flags: N Z C
     // Operation and flag results are identical to equivalent mode accumulator CMP ops.
     // Immediate     CPY #$44      $C0  2   2
-    {CPY, 0xC0, IMMEDIATE, nullptr, 2, 2},
+    {CPY, 0xC0, IMMEDIATE, 2, 2},
     // Zero Page     CPY $44       $C4  2   3
-    {CPY, 0xC4, ZERO_PAGE, nullptr, 2, 3},
+    {CPY, 0xC4, ZERO_PAGE, 2, 3},
     // Absolute      CPY $4400     $CC  3   4
-    {CPY, 0xCC, ABSOLUTE, nullptr, 3, 4},
+    {CPY, 0xCC, ABSOLUTE, 3, 4},
 
     // DEC (DECrement memory)
     // Affects Flags: N Z
     // Zero Page     DEC $44       $C6  2   5
-    {DEC, 0xC6, ZERO_PAGE, nullptr, 2, 5},
+    {DEC, 0xC6, ZERO_PAGE, 2, 5},
     // Zero Page,X   DEC $44,X     $D6  2   6
-    {DEC, 0xD6, ZERO_PAGE_X, nullptr, 2, 6},
+    {DEC, 0xD6, ZERO_PAGE_X, 2, 6},
     // Absolute      DEC $4400     $CE  3   6
-    {DEC, 0xCE, ABSOLUTE, nullptr, 3, 6},
+    {DEC, 0xCE, ABSOLUTE, 3, 6},
     // Absolute,X    DEC $4400,X   $DE  3   7
-    {DEC, 0xDE, ABSOLUTE_X, nullptr, 3, 7},
+    {DEC, 0xDE, ABSOLUTE_X, 3, 7},
 
     // EOR (bitwise Exclusive OR)
     // Affects Flags: N Z
     // Immediate     EOR #$44      $49  2   2
-    {EOR, 0x49, IMMEDIATE, nullptr, 2, 2},
+    {EOR, 0x49, IMMEDIATE, 2, 2},
     // Zero Page     EOR $44       $45  2   3
-    {EOR, 0x45, ZERO_PAGE, nullptr, 2, 3},
+    {EOR, 0x45, ZERO_PAGE, 2, 3},
     // Zero Page,X   EOR $44,X     $55  2   4
-    {EOR, 0x55, ZERO_PAGE_X, nullptr, 2, 4},
+    {EOR, 0x55, ZERO_PAGE_X, 2, 4},
     // Absolute      EOR $4400     $4D  3   4
-    {EOR, 0x4D, ABSOLUTE, nullptr, 3, 4},
+    {EOR, 0x4D, ABSOLUTE, 3, 4},
     // Absolute,X    EOR $4400,X   $5D  3   4+
-    {EOR, 0x5D, ABSOLUTE_X, nullptr, 3, 4, true},
+    {EOR, 0x5D, ABSOLUTE_X, 3, 4, true},
     // Absolute,Y    EOR $4400,Y   $59  3   4+
-    {EOR, 0x59, ABSOLUTE_Y, nullptr, 3, 4, true},
+    {EOR, 0x59, ABSOLUTE_Y, 3, 4, true},
     // Indirect,X    EOR ($44,X)   $41  2   6
-    {EOR, 0x41, X_INDIRECT, nullptr, 2, 6},
+    {EOR, 0x41, X_INDIRECT, 2, 6},
     // Indirect,Y    EOR ($44),Y   $51  2   5+
-    {EOR, 0x51, INDIRECT_Y, nullptr, 2, 5, true},
+    {EOR, 0x51, INDIRECT_Y, 2, 5, true},
 
     // Flag (Processor Status) Instructions
     // Affect Flags: as noted
@@ -314,30 +352,30 @@ inline constexpr Instruction instructions[] = {
     // and logical operations i.e. only ADC, BIT, CLV, PLP, RTI and SBC affect it. There is no op code to set the
     // overflow but a BIT test on an RTS instruction will do the trick.
     // CLC (CLear Carry)              $18
-    {CLC, 0x18, IMPLIED, nullptr, 1, 2},
+    {CLC, 0x18, IMPLIED, 1, 2},
     // SEC (SEt Carry)                $38
-    {SEC, 0x38, IMPLIED, nullptr, 1, 2},
+    {SEC, 0x38, IMPLIED, 1, 2},
     // CLI (CLear Interrupt)          $58
-    {CLI, 0x58, IMPLIED, nullptr, 1, 2},
+    {CLI, 0x58, IMPLIED, 1, 2},
     // SEI (SEt Interrupt)            $78
-    {SEI, 0x78, IMPLIED, nullptr, 1, 2},
+    {SEI, 0x78, IMPLIED, 1, 2},
     // CLV (CLear oVerflow)           $B8
-    {CLV, 0xB8, IMPLIED, nullptr, 1, 2},
+    {CLV, 0xB8, IMPLIED, 1, 2},
     // CLD (CLear Decimal)            $D8
-    {CLD, 0xD8, IMPLIED, nullptr, 1, 2},
+    {CLD, 0xD8, IMPLIED, 1, 2},
     // SED (SEt Decimal)              $F8
-    {SED, 0xF8, IMPLIED, nullptr, 1, 2},
+    {SED, 0xF8, IMPLIED, 1, 2},
 
     // INC (INCrement memory)
     // Affects Flags: N Z
     // Zero Page     INC $44       $E6  2   5
-    {INC, 0xE6, ZERO_PAGE, nullptr, 2, 5},
+    {INC, 0xE6, ZERO_PAGE, 2, 5},
     // Zero Page,X   INC $44,X     $F6  2   6
-    {INC, 0xF6, ZERO_PAGE_X, nullptr, 2, 6},
+    {INC, 0xF6, ZERO_PAGE_X, 2, 6},
     // Absolute      INC $4400     $EE  3   6
-    {INC, 0xEE, ABSOLUTE, nullptr, 3, 6},
+    {INC, 0xEE, ABSOLUTE, 3, 6},
     // Absolute,X    INC $4400,X   $FE  3   7
-    {INC, 0xFE, ABSOLUTE_X, nullptr, 3, 7},
+    {INC, 0xFE, ABSOLUTE_X, 3, 7},
 
     // JMP (JuMP)
     // Affects Flags: none
@@ -350,75 +388,75 @@ inline constexpr Instruction instructions[] = {
     // will be a transfer of control to $4080 rather than $5080 as you intended i.e. the 6502 took the low byte of the
     // address from $30FF and the high byte from $3000.
     // Absolute      JMP $5597     $4C  3   3
-    {JMP, 0x4C, ABSOLUTE, nullptr, 3, 3},
+    {JMP, 0x4C, ABSOLUTE, 3, 3},
     // Indirect      JMP ($5597)   $6C  3   5
-    {JMP, 0x6C, INDIRECT, nullptr, 3, 5},
+    {JMP, 0x6C, INDIRECT, 3, 5},
 
     // JSR (Jump to SubRoutine)
     // Affects Flags: none
     // JSR pushes the address-1 of the next operation on to the stack before transferring program control to the
     // following address. Subroutines are normally terminated by a RTS op code.
     // Absolute      JSR $5597     $20  3   6
-    {JSR, 0x20, ABSOLUTE, nullptr, 3, 6},
+    {JSR, 0x20, ABSOLUTE, 3, 6},
 
     // LDA (LoaD Accumulator)
     // Affects Flags: N Z
     // Immediate     LDA #$44      $A9  2   2
-    {LDA, 0xA9, IMMEDIATE, nullptr, 2, 2},
+    {LDA, 0xA9, IMMEDIATE, 2, 2},
     // Zero Page     LDA $44       $A5  2   3
-    {LDA, 0xA5, ZERO_PAGE, nullptr, 2, 3},
+    {LDA, 0xA5, ZERO_PAGE, 2, 3},
     // Zero Page,X   LDA $44,X     $B5  2   4
-    {LDA, 0xB5, ZERO_PAGE_X, nullptr, 2, 4},
+    {LDA, 0xB5, ZERO_PAGE_X, 2, 4},
     // Absolute      LDA $4400     $AD  3   4
-    {LDA, 0xAD, ABSOLUTE, nullptr, 3, 4},
+    {LDA, 0xAD, ABSOLUTE, 3, 4},
     // Absolute,X    LDA $4400,X   $BD  3   4+
-    {LDA, 0xBD, ABSOLUTE_X, nullptr, 3, 4, true},
+    {LDA, 0xBD, ABSOLUTE_X, 3, 4, true},
     // Absolute,Y    LDA $4400,Y   $B9  3   4+
-    {LDA, 0xB9, ABSOLUTE_Y, nullptr, 3, 4, true},
+    {LDA, 0xB9, ABSOLUTE_Y, 3, 4, true},
     // Indirect,X    LDA ($44,X)   $A1  2   6
-    {LDA, 0xA1, X_INDIRECT, nullptr, 2, 6},
+    {LDA, 0xA1, X_INDIRECT, 2, 6},
     // Indirect,Y    LDA ($44),Y   $B1  2   5+
-    {LDA, 0xB1, INDIRECT_Y, nullptr, 2, 5},
+    {LDA, 0xB1, INDIRECT_Y, 2, 5},
 
     // LDX (LoaD X register)
     // Affects Flags: N Z
     // Immediate     LDX #$44      $A2  2   2
-    {LDX, 0xA2, IMMEDIATE, nullptr, 2, 2},
+    {LDX, 0xA2, IMMEDIATE, 2, 2},
     // Zero Page     LDX $44       $A6  2   3
-    {LDX, 0xA6, ZERO_PAGE, nullptr, 2, 3},
+    {LDX, 0xA6, ZERO_PAGE, 2, 3},
     // Zero Page,Y   LDX $44,Y     $B6  2   4
-    {LDX, 0xB6, ZERO_PAGE_Y, nullptr, 2, 4},
+    {LDX, 0xB6, ZERO_PAGE_Y, 2, 4},
     // Absolute      LDX $4400     $AE  3   4
-    {LDX, 0xAE, ABSOLUTE, nullptr, 3, 4},
+    {LDX, 0xAE, ABSOLUTE, 3, 4},
     // Absolute,Y    LDX $4400,Y   $BE  3   4+
-    {LDX, 0xBE, ABSOLUTE_Y, nullptr, 3, 4, true},
+    {LDX, 0xBE, ABSOLUTE_Y, 3, 4, true},
 
     // LDY (LoaD Y register)
     // Affects Flags: N Z
     // Immediate     LDY #$44      $A0  2   2
-    {LDY, 0xA0, IMMEDIATE, nullptr, 2, 2},
+    {LDY, 0xA0, IMMEDIATE, 2, 2},
     // Zero Page     LDY $44       $A4  2   3
-    {LDY, 0xA4, ZERO_PAGE, nullptr, 2, 3},
+    {LDY, 0xA4, ZERO_PAGE, 2, 3},
     // Zero Page,X   LDY $44,X     $B4  2   4
-    {LDY, 0xB4, ZERO_PAGE_X, nullptr, 2, 4},
+    {LDY, 0xB4, ZERO_PAGE_X, 2, 4},
     // Absolute      LDY $4400     $AC  3   4
-    {LDY, 0xAC, ABSOLUTE, nullptr, 3, 4},
+    {LDY, 0xAC, ABSOLUTE, 3, 4},
     // Absolute,X    LDY $4400,X   $BC  3   4+
-    {LDY, 0xBC, ABSOLUTE_X, nullptr, 3, 4, true},
+    {LDY, 0xBC, ABSOLUTE_X, 3, 4, true},
 
     // LSR (Logical Shift Right)
     // Affects Flags: N Z C
     // LSR shifts all bits right one position. 0 is shifted into bit 7 and the original bit 0 is shifted into the Carry.
     // Accumulator   LSR A         $4A  1   2
-    {LSR, 0x4A, ACCUMULATOR, nullptr, 1, 2},
+    {LSR, 0x4A, ACCUMULATOR, 1, 2},
     // Zero Page     LSR $44       $46  2   5
-    {LSR, 0x46, ZERO_PAGE, nullptr, 2, 5},
+    {LSR, 0x46, ZERO_PAGE, 2, 5},
     // Zero Page,X   LSR $44,X     $56  2   6
-    {LSR, 0x56, ZERO_PAGE_X, nullptr, 2, 6},
+    {LSR, 0x56, ZERO_PAGE_X, 2, 6},
     // Absolute      LSR $4400     $4E  3   6
-    {LSR, 0x4E, ABSOLUTE, nullptr, 3, 6},
+    {LSR, 0x4E, ABSOLUTE, 3, 6},
     // Absolute,X    LSR $4400,X   $5E  3   7
-    {LSR, 0x5E, ABSOLUTE_X, nullptr, 3, 7},
+    {LSR, 0x5E, ABSOLUTE_X, 3, 7},
 
     // Wrap-Around
     // Use caution with indexed zero page operations as they are subject to wrap-around. For example, if the X register
@@ -462,76 +500,76 @@ inline constexpr Instruction instructions[] = {
     // Affects Flags: none
     // NOP is used to reserve space for future modifications or effectively REM out existing code.
     // Implied       NOP           $EA  1   2
-    {NOP, 0xEA, IMPLIED, nullptr, 1, 2},
+    {NOP, 0xEA, IMPLIED, 1, 2},
 
     // ORA (bitwise OR with Accumulator)
     // Affects Flags: N Z
     // Immediate     ORA #$44      $09  2   2
-    {ORA, 0x09, IMMEDIATE, nullptr, 2, 2},
+    {ORA, 0x09, IMMEDIATE, 2, 2},
     // Zero Page     ORA $44       $05  2   3
-    {ORA, 0x05, ZERO_PAGE, nullptr, 2, 3},
+    {ORA, 0x05, ZERO_PAGE, 2, 3},
     // Zero Page,X   ORA $44,X     $15  2   4
-    {ORA, 0x15, ZERO_PAGE_X, nullptr, 2, 4},
+    {ORA, 0x15, ZERO_PAGE_X, 2, 4},
     // Absolute      ORA $4400     $0D  3   4
-    {ORA, 0x0D, ABSOLUTE, nullptr, 3, 4},
+    {ORA, 0x0D, ABSOLUTE, 3, 4},
     // Absolute,X    ORA $4400,X   $1D  3   4+
-    {ORA, 0x1D, ABSOLUTE_X, nullptr, 3, 4, true},
+    {ORA, 0x1D, ABSOLUTE_X, 3, 4, true},
     // Absolute,Y    ORA $4400,Y   $19  3   4+
-    {ORA, 0x19, ABSOLUTE_Y, nullptr, 3, 4, true},
+    {ORA, 0x19, ABSOLUTE_Y, 3, 4, true},
     // Indirect,X    ORA ($44,X)   $01  2   6
-    {ORA, 0x01, X_INDIRECT, nullptr, 2, 6},
+    {ORA, 0x01, X_INDIRECT, 2, 6},
     // Indirect,Y    ORA ($44),Y   $11  2   5+
-    {ORA, 0x11, IMMEDIATE, nullptr, 2, 5, true},
+    {ORA, 0x11, INDIRECT_Y, 2, 5, true},
 
     // Register Instructions
     // Affect Flags: N Z
     // These instructions are implied mode, have a length of one byte and require two machine cycles.
     // TAX (Transfer A to X)    $AA
-    {TAX, 0xAA, IMPLIED, nullptr, 1, 2},
+    {TAX, 0xAA, IMPLIED, 1, 2},
     // TXA (Transfer X to A)    $8A
-    {TXA, 0x8A, IMPLIED, nullptr, 1, 2},
+    {TXA, 0x8A, IMPLIED, 1, 2},
     // DEX (DEcrement X)        $CA
-    {DEX, 0xCA, IMPLIED, nullptr, 1, 2},
+    {DEX, 0xCA, IMPLIED, 1, 2},
     // INX (INcrement X)        $E8
-    {INX, 0xE8, IMPLIED, nullptr, 1, 2},
+    {INX, 0xE8, IMPLIED, 1, 2},
     // TAY (Transfer A to Y)    $A8
-    {TAY, 0xA8, IMPLIED, nullptr, 1, 2},
+    {TAY, 0xA8, IMPLIED, 1, 2},
     // TYA (Transfer Y to A)    $98
-    {TYA, 0x98, IMPLIED, nullptr, 1, 2},
+    {TYA, 0x98, IMPLIED, 1, 2},
     // DEY (DEcrement Y)        $88
-    {DEY, 0x88, IMPLIED, nullptr, 1, 2},
+    {DEY, 0x88, IMPLIED, 1, 2},
     // INY (INcrement Y)        $C8
-    {INY, 0xC8, IMPLIED, nullptr, 1, 2},
+    {INY, 0xC8, IMPLIED, 1, 2},
 
     // ROL (ROtate Left)
     // Affects Flags: N Z C
     // ROL shifts all bits left one position. The Carry is shifted into bit 0 and the original bit 7 is shifted into the
     // Carry.
     // Accumulator   ROL A         $2A  1   2
-    {ROL, 0x2A, ACCUMULATOR, nullptr, 1, 2},
+    {ROL, 0x2A, ACCUMULATOR, 1, 2},
     // Zero Page     ROL $44       $26  2   5
-    {ROL, 0x26, ZERO_PAGE, nullptr, 2, 5},
+    {ROL, 0x26, ZERO_PAGE, 2, 5},
     // Zero Page,X   ROL $44,X     $36  2   6
-    {ROL, 0x36, ZERO_PAGE_X, nullptr, 2, 6},
+    {ROL, 0x36, ZERO_PAGE_X, 2, 6},
     // Absolute      ROL $4400     $2E  3   6
-    {ROL, 0x2E, ABSOLUTE, nullptr, 3, 6},
+    {ROL, 0x2E, ABSOLUTE, 3, 6},
     // Absolute,X    ROL $4400,X   $3E  3   7
-    {ROL, 0x3E, ABSOLUTE_X, nullptr, 3, 7},
+    {ROL, 0x3E, ABSOLUTE_X, 3, 7},
 
     // ROR (ROtate Right)
     // Affects Flags: N Z C
     // ROR shifts all bits right one position. The Carry is shifted into bit 7 and the original bit 0 is shifted into
     // the Carry.
     // Accumulator   ROR A         $6A  1   2
-    {ROR, 0x6A, ACCUMULATOR, nullptr, 1, 2},
+    {ROR, 0x6A, ACCUMULATOR, 1, 2},
     // Zero Page     ROR $44       $66  2   5
-    {ROR, 0x66, ZERO_PAGE, nullptr, 2, 5},
+    {ROR, 0x66, ZERO_PAGE, 2, 5},
     // Zero Page,X   ROR $44,X     $76  2   6
-    {ROR, 0x76, ZERO_PAGE_X, nullptr, 2, 6},
+    {ROR, 0x76, ZERO_PAGE_X, 2, 6},
     // Absolute      ROR $4400     $6E  3   6
-    {ROR, 0x6E, ABSOLUTE, nullptr, 3, 6},
+    {ROR, 0x6E, ABSOLUTE, 3, 6},
     // Absolute,X    ROR $4400,X   $7E  3   7
-    {ROR, 0x7E, ABSOLUTE_X, nullptr, 3, 7},
+    {ROR, 0x7E, ABSOLUTE_X, 3, 7},
 
     // RTI (ReTurn from Interrupt)
     // Affects Flags: all
@@ -539,7 +577,7 @@ inline constexpr Instruction instructions[] = {
     // push the PC first and then the PSW).
     // Note that unlike RTS, the return address on the stack is the actual address rather than the address-1.
     // Implied       RTI           $40  1   6
-    {RTI, 0x40, IMPLIED, nullptr, 1, 6},
+    {RTI, 0x40, IMPLIED, 1, 6},
 
     // RTS (ReTurn from Subroutine)
     // Affects Flags: none
@@ -563,7 +601,7 @@ inline constexpr Instruction instructions[] = {
     //  PHA
     //  RTS
     // Implied       RTS           $60  1   6
-    {RTS, 0x60, IMPLIED, nullptr, 1, 6},
+    {RTS, 0x60, IMPLIED, 1, 6},
 
     // SBC (SuBtract with Carry)
     // Affects Flags: N V Z C
@@ -572,73 +610,73 @@ inline constexpr Instruction instructions[] = {
     // There is no way to subtract without the carry which works as an inverse borrow. i.e, to subtract you set the
     // carry before the operation. If the carry is cleared by the operation, it indicates a borrow occurred.
     // Immediate     SBC #$44      $E9  2   2
-    {SBC, 0xE9, IMMEDIATE, nullptr, 2, 2},
+    {SBC, 0xE9, IMMEDIATE, 2, 2},
     // Zero Page     SBC $44       $E5  2   3
-    {SBC, 0xE5, ZERO_PAGE, nullptr, 2, 3},
+    {SBC, 0xE5, ZERO_PAGE, 2, 3},
     // Zero Page,X   SBC $44,X     $F5  2   4
-    {SBC, 0xF5, ZERO_PAGE_X, nullptr, 2, 4},
+    {SBC, 0xF5, ZERO_PAGE_X, 2, 4},
     // Absolute      SBC $4400     $ED  3   4
-    {SBC, 0xED, ABSOLUTE, nullptr, 3, 4},
+    {SBC, 0xED, ABSOLUTE, 3, 4},
     // Absolute,X    SBC $4400,X   $FD  3   4+
-    {SBC, 0xFD, ABSOLUTE_X, nullptr, 3, 4, true},
+    {SBC, 0xFD, ABSOLUTE_X, 3, 4, true},
     // Absolute,Y    SBC $4400,Y   $F9  3   4+
-    {SBC, 0xF9, ABSOLUTE_Y, nullptr, 3, 4, true},
+    {SBC, 0xF9, ABSOLUTE_Y, 3, 4, true},
     // Indirect,X    SBC ($44,X)   $E1  2   6
-    {SBC, 0xE1, X_INDIRECT, nullptr, 2, 6},
+    {SBC, 0xE1, X_INDIRECT, 2, 6},
     // Indirect,Y    SBC ($44),Y   $F1  2   5+
-    {SBC, 0xF1, INDIRECT_Y, nullptr, 2, 5, true},
+    {SBC, 0xF1, INDIRECT_Y, 2, 5, true},
 
     // STA (STore Accumulator)
     // Affects Flags: none
     // Zero Page     STA $44       $85  2   3
-    {STA, 0x85, ZERO_PAGE, nullptr, 2, 3},
+    {STA, 0x85, ZERO_PAGE, 2, 3},
     // Zero Page,X   STA $44,X     $95  2   4
-    {STA, 0x95, ZERO_PAGE_X, nullptr, 2, 4},
+    {STA, 0x95, ZERO_PAGE_X, 2, 4},
     // Absolute      STA $4400     $8D  3   4
-    {STA, 0x8D, ABSOLUTE, nullptr, 3, 4},
+    {STA, 0x8D, ABSOLUTE, 3, 4},
     // Absolute,X    STA $4400,X   $9D  3   5
-    {STA, 0x9D, ABSOLUTE_X, nullptr, 3, 5},
+    {STA, 0x9D, ABSOLUTE_X, 3, 5},
     // Absolute,Y    STA $4400,Y   $99  3   5
-    {STA, 0x99, ABSOLUTE_Y, nullptr, 3, 5},
+    {STA, 0x99, ABSOLUTE_Y, 3, 5},
     // Indirect,X    STA ($44,X)   $81  2   6
-    {STA, 0x81, X_INDIRECT, nullptr, 2, 6},
+    {STA, 0x81, X_INDIRECT, 2, 6},
     // Indirect,Y    STA ($44),Y   $91  2   6
-    {STA, 0x91, INDIRECT_Y, nullptr, 2, 6},
+    {STA, 0x91, INDIRECT_Y, 2, 6},
 
     // Stack Instructions
     // These instructions are implied mode, have a length of one byte and require machine cycles as indicated. The
     // "PuLl" operations are known as "POP" on most other microprocessors. With the 6502, the stack is always on page
     // one ($100-$1FF) and works top down.
     // TXS (Transfer X to Stack ptr)   $9A  2
-    {TXS, 0x9A, IMPLIED, nullptr, 1, 2},
+    {TXS, 0x9A, IMPLIED, 1, 2},
     // TSX (Transfer Stack ptr to X)   $BA  2
-    {TSX, 0xBA, IMPLIED, nullptr, 1, 2},
+    {TSX, 0xBA, IMPLIED, 1, 2},
     // PHA (PusH Accumulator)          $48  3
-    {PHA, 0x48, IMPLIED, nullptr, 1, 3},
+    {PHA, 0x48, IMPLIED, 1, 3},
     // PLA (PuLl Accumulator)          $68  4
-    {PLA, 0x68, IMPLIED, nullptr, 1, 4},
+    {PLA, 0x68, IMPLIED, 1, 4},
     // PHP (PusH Processor status)     $08  3
-    {PHP, 0x08, IMPLIED, nullptr, 1, 3},
+    {PHP, 0x08, IMPLIED, 1, 3},
     // PLP (PuLl Processor status)     $28  4
-    {PLP, 0x28, IMPLIED, nullptr, 1, 4},
+    {PLP, 0x28, IMPLIED, 1, 4},
 
     // STX (STore X register)
     // Affects Flags: none
     // Zero Page     STX $44       $86  2   3
-    {STX, 0x86, ZERO_PAGE, nullptr, 2, 3},
+    {STX, 0x86, ZERO_PAGE, 2, 3},
     // Zero Page,Y   STX $44,Y     $96  2   4
-    {STX, 0x96, ZERO_PAGE_Y, nullptr, 2, 4},
+    {STX, 0x96, ZERO_PAGE_Y, 2, 4},
     // Absolute      STX $4400     $8E  3   4
-    {STX, 0x8E, ABSOLUTE, nullptr, 3, 4},
+    {STX, 0x8E, ABSOLUTE, 3, 4},
 
     // STY (STore Y register)
     // Affects Flags: none
     // Zero Page     STY $44       $84  2   3
-    {STY, 0x84, ZERO_PAGE, nullptr, 2, 3},
+    {STY, 0x84, ZERO_PAGE, 2, 3},
     // Zero Page,X   STY $44,X     $94  2   4
-    {STY, 0x94, ZERO_PAGE_X, nullptr, 2, 4},
+    {STY, 0x94, ZERO_PAGE_X, 2, 4},
     // Absolute      STY $4400     $8C  3   4
-    {STY, 0x8C, ABSOLUTE, nullptr, 3, 4},
+    {STY, 0x8C, ABSOLUTE, 3, 4},
 
 };
 } // namespace cpu
