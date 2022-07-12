@@ -35,11 +35,11 @@ struct Memory {
         auto offset = address - me->address_start;
         if (!write) {
             me->data_bus.put(me->backend[offset]);
-            spdlog::trace("{} read: {:02X} @ {:04X}", me->name, data, address);
+            spdlog::trace("{} read: {:02X} @ {:04X}", me->name, me->backend[offset], address);
             return true;
         } else if (me->writeable) {
             me->backend[offset] = data;
-            spdlog::trace("{} write: {:02X} @ {:04X}", me->name, data, address);
+            spdlog::trace("{} write: {:02X} @ {:04X}", me->name, me->backend[offset], address);
             return true;
         } else {
             spdlog::trace("{} write: {:02X} @ {:04X} NON-WRITEABLE!", me->name, data, address);
@@ -79,17 +79,22 @@ enum {
     SAVE_RAM_SIZE       = 0x2000,
     PRG_ROM_START       = 0x8000,
     PRG_ROM_SIZE        = 0x8000,
+
+    // Vectors
+    NMI_VECTOR   = 0xFFFA,
+    RESET_VECTOR = 0xFFFC,
+    IRQ_VECTOR   = 0xFFFE,
 };
 
 struct ProcessorStatus {
-    uint8_t n : 1;
-    uint8_t v : 1;
-    uint8_t _ : 1;
-    uint8_t b : 1;
-    uint8_t d : 1;
-    uint8_t i : 1;
-    uint8_t z : 1;
-    uint8_t c : 1;
+    uint8_t n : 1; //!< Negative flag
+    uint8_t v : 1; //!< Overflow flag
+    uint8_t _ : 1; //!<
+    uint8_t b : 1; //!< Break flag
+    uint8_t d : 1; //!< Decimal flag
+    uint8_t i : 1; //!< Interrupt disable flag
+    uint8_t z : 1; //!< Zero flag
+    uint8_t c : 1; //!< Carry flag
 };
 
 static_assert(sizeof(ProcessorStatus) == 1);

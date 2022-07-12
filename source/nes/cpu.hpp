@@ -5,76 +5,10 @@
 #include "source/bus.hpp"
 #include <cstdint>
 #include <fmt/core.h>
+#include <map>
 #include <optional>
 
 namespace cpu {
-enum {
-    // Non-Indexed, non memory
-    ACCUMULATOR, // Num arg bytes: 1, num clock cycles: 2
-    IMMEDIATE,   // Num arg bytes: 2, num clock cycles: 2
-    IMPLIED,     // Num arg bytes: 2, num clock cycles: differs
-
-    // Non-Indexed memory ops
-    RELATIVE,  // Num arg bytes: 2, num clock cycles: 2
-    ABSOLUTE,  // Num arg bytes: 3, num clock cycles: differs
-    ZERO_PAGE, // Num arg bytes: 2, num clock cycles: differs
-    INDIRECT,  // Num arg bytes: 3, num clock cycles: 5
-
-    // Indexed memory ops
-    ABSOLUTE_X,  // Num arg bytes: 3, num clock cycles: differs
-    ABSOLUTE_Y,  // Num arg bytes: 3, num clock cycles: differs
-    ZERO_PAGE_X, // Num arg bytes: 2, num clock cycles: differs
-    ZERO_PAGE_Y, // Num arg bytes: 2, num clock cycles: 4
-    X_INDIRECT,  // Num arg bytes: 2, num clock cycles: 6
-    INDIRECT_Y,  // Num arg bytes: 2, num clock cycles: differs
-};
-
-struct Instruction {
-    const char *mnemonic                      = nullptr;
-    uint8_t     opcode                        = 0;
-    uint8_t     addr_mode                     = IMPLIED;
-    uint8_t     num_args                      = 0;
-    uint8_t     cycles                        = 0;
-    bool        extra_cycle_on_cross_boundary = false;
-
-    static std::optional<Instruction> decode(uint8_t opcode);
-};
-
-struct Obj {
-    enum class State {
-        RESET,
-        RUN,
-        HALT,
-    };
-    BusHarness address_bus;
-    BusHarness data_bus;
-    BusHarness write_signal;
-
-    cpumem::Registers &registers;
-    State              state            = State::RESET;
-    size_t             subcycle_counter = 0;
-    uint8_t            buffer[4];
-    size_t             cycle_count;
-
-    std::optional<Instruction> current_instruction = std::nullopt;
-
-    Obj(cpumem::Registers &registers) : address_bus("cpu"), data_bus("cpu"), write_signal("cpu"), registers(registers) {
-    }
-
-    void reset() {
-        state            = State::RESET;
-        subcycle_counter = 0;
-        buffer[0]        = 0;
-        buffer[1]        = 0;
-        buffer[2]        = 0;
-        buffer[3]        = 0;
-        cycle_count      = 0;
-        current_instruction.reset();
-    }
-
-    void cycle();
-};
-
 // Mnemonics
 inline constexpr const char *ADC = "ADC";
 inline constexpr const char *AND = "AND";
@@ -132,6 +66,295 @@ inline constexpr const char *TSX = "TSX";
 inline constexpr const char *TXA = "TXA";
 inline constexpr const char *TXS = "TXS";
 inline constexpr const char *TYA = "TYA";
+
+enum {
+    // == Non-Indexed, non memory ==
+
+    // Accumulator
+    // Some instructions have an option to operate directly upon the accumulator. The programmer specifies this by using
+    // a special operand value, 'A'. For example:
+    ACCUMULATOR, // 0, Num arg bytes: 1, num clock cycles: 2
+
+    // Immediate
+    // Immediate addressing allows the programmer to directly specify an 8 bit constant within the instruction. It is
+    // indicated by a '#' symbol followed by an numeric expression. For example:
+    IMMEDIATE, // 1, Num arg bytes: 2, num clock cycles: 2
+
+    // Implicit
+    // For many 6502 instructions the source and destination of the information to be manipulated is implied directly by
+    // the function of the instruction itself and no further operand needs to be specified. Operations like 'Clear Carry
+    // Flag' (CLC) and 'Return from Subroutine' (RTS) are implicit.
+    IMPLIED, // 2, Num arg bytes: 2, num clock cycles: differs
+
+    // == Non-Indexed memory ops ==
+
+    // Relative
+    // Relative addressing mode is used by branch instructions (e.g. BEQ, BNE, etc.) which contain a signed 8 bit
+    // relative offset (e.g. -128 to +127) which is added to program counter if the condition is true. As the program
+    // counter itself is incremented during instruction execution by two the effective address range for the target
+    // instruction must be with -126 to +129 bytes of the branch.
+    RELATIVE, // 3, Num arg bytes: 2, num clock cycles: 2
+
+    // Absolute
+    // Instructions using absolute addressing contain a full 16 bit address to identify the target location.
+    ABSOLUTE, // 4, Num arg bytes: 3, num clock cycles: differs
+
+    // Zero Page
+    // An instruction using zero page addressing mode has only an 8 bit address operand. This limits it to addressing
+    // only the first 256 bytes of memory (e.g. $0000 to $00FF) where the most significant byte of the address is always
+    // zero. In zero page mode only the least significant byte of the address is held in the instruction making it
+    // shorter by one byte (important for space saving) and one less memory fetch during execution (important for
+    // speed).
+    // An assembler will automatically select zero page addressing mode if the operand evaluates to a zero page address
+    // and the instruction supports the mode (not all do).
+    ZERO_PAGE, // 5, Num arg bytes: 2, num clock cycles: differs
+
+    // Indirect
+    // JMP is the only 6502 instruction to support indirection. The instruction contains a 16 bit address which
+    // identifies the location of the least significant byte of another 16 bit memory address which is the real target
+    // of the instruction.
+    // For example if location $0120 contains $FC and location $0121 contains $BA then the instruction JMP ($0120) will
+    // cause the next instruction execution to occur at $BAFC (e.g. the contents of $0120 and $0121).
+    INDIRECT, // 6, Num arg bytes: 3, num clock cycles: 5
+
+    // == Indexed memory ops ==
+
+    // Absolute,X
+    // The address to be accessed by an instruction using X register indexed absolute addressing is computed by taking
+    // the 16 bit address from the instruction and added the contents of the X register. For example if X contains $92
+    // then an STA $2000,X instruction will store the accumulator at $2092 (e.g. $2000 + $92).
+    ABSOLUTE_X, // 7, Num arg bytes: 3, num clock cycles: differs
+
+    // Absolute,Y
+    // The Y register indexed absolute addressing mode is the same as the previous mode only with the contents of the Y
+    // register added to the 16 bit address from the instruction.
+    ABSOLUTE_Y, // 8, Num arg bytes: 3, num clock cycles: differs
+
+    // Zero Page,X
+    // The address to be accessed by an instruction using indexed zero page addressing is calculated by taking the 8 bit
+    // zero page address from the instruction and adding the current value of the X register to it. For example if the X
+    // register contains $0F and the instruction LDA $80,X is executed then the accumulator will be loaded from $008F
+    // (e.g. $80 + $0F => $8F).
+    // NB: The address calculation wraps around if the sum of the base address and the register exceed $FF. If we repeat
+    // the last example but with $FF in the X register then the accumulator will be loaded from $007F (e.g. $80 + $FF =>
+    // $7F) and not $017F.
+    ZERO_PAGE_X, // 9, Num arg bytes: 2, num clock cycles: differs
+
+    // Zero Page,Y
+    // The address to be accessed by an instruction using indexed zero page addressing is calculated by taking the 8 bit
+    // zero page address from the instruction and adding the current value of the Y register to it. This mode can only
+    // be used with the LDX and STX instructions.
+    ZERO_PAGE_Y, // 10, Num arg bytes: 2, num clock cycles: 4
+
+    // Indexed Indirect
+    // Indexed indirect addressing is normally used in conjunction with a table of address held on zero page. The
+    // address of the table is taken from the instruction and the X register added to it (with zero page wrap around) to
+    // give the location of the least significant byte of the target address.
+    X_INDIRECT, // 11, Num arg bytes: 2, num clock cycles: 6
+
+    // Indirect Indexed
+    // Indirect indirect addressing is the most common indirection mode used on the 6502. In instruction contains the
+    // zero page location of the least significant byte of 16 bit address. The Y register is dynamically added to this
+    // value to generated the actual target address for operation.
+    INDIRECT_Y, // 12, Num arg bytes: 2, num clock cycles: differs
+};
+
+struct Instruction {
+    const char *mnemonic                      = nullptr;
+    uint8_t     opcode                        = 0;
+    uint8_t     addr_mode                     = IMPLIED;
+    uint8_t     num_args                      = 0;
+    uint8_t     cycles                        = 0;
+    bool        extra_cycle_on_cross_boundary = false;
+
+    static std::optional<Instruction> decode(uint8_t opcode);
+};
+
+struct Obj {
+    typedef bool (Obj::*opcode_func)(cpu::Instruction &instr);
+    typedef uint16_t (Obj::*addrmode_func)();
+
+    enum class State {
+        RESET,
+        RUN,
+        HALT,
+    };
+
+    BusHarness address_bus;
+    BusHarness data_bus;
+    BusHarness write_signal;
+
+    cpumem::Registers &registers;
+    State              state               = State::RESET;
+    size_t             subcycle_counter    = 0;
+    size_t             actual_subcycle_max = 0;
+    uint8_t            buffer[5];
+    size_t             cycle_count;
+
+    std::optional<Instruction>          current_instruction = std::nullopt;
+    std::map<const char *, opcode_func> opcode_funcs;
+    std::map<int, addrmode_func>        addrmode_funcs;
+
+    Obj(cpumem::Registers &registers) : address_bus("cpu"), data_bus("cpu"), write_signal("cpu"), registers(registers) {
+        opcode_funcs[ADC] = &Obj::_op_ADC;
+        opcode_funcs[AND] = &Obj::_op_AND;
+        opcode_funcs[ASL] = &Obj::_op_ASL;
+        opcode_funcs[BCC] = &Obj::_op_BCC;
+        opcode_funcs[BCS] = &Obj::_op_BCS;
+        opcode_funcs[BEQ] = &Obj::_op_BEQ;
+        opcode_funcs[BIT] = &Obj::_op_BIT;
+        opcode_funcs[BMI] = &Obj::_op_BMI;
+        opcode_funcs[BNE] = &Obj::_op_BNE;
+        opcode_funcs[BPL] = &Obj::_op_BPL;
+        opcode_funcs[BRK] = &Obj::_op_BRK;
+        opcode_funcs[BVC] = &Obj::_op_BVC;
+        opcode_funcs[BVS] = &Obj::_op_BVS;
+        opcode_funcs[CLC] = &Obj::_op_CLC;
+        opcode_funcs[CLD] = &Obj::_op_CLD;
+        opcode_funcs[CLI] = &Obj::_op_CLI;
+        opcode_funcs[CLV] = &Obj::_op_CLV;
+        opcode_funcs[CMP] = &Obj::_op_CMP;
+        opcode_funcs[CPX] = &Obj::_op_CPX;
+        opcode_funcs[CPY] = &Obj::_op_CPY;
+        opcode_funcs[DEC] = &Obj::_op_DEC;
+        opcode_funcs[DEX] = &Obj::_op_DEX;
+        opcode_funcs[DEY] = &Obj::_op_DEY;
+        opcode_funcs[EOR] = &Obj::_op_EOR;
+        opcode_funcs[INC] = &Obj::_op_INC;
+        opcode_funcs[INX] = &Obj::_op_INX;
+        opcode_funcs[INY] = &Obj::_op_INY;
+        opcode_funcs[JMP] = &Obj::_op_JMP;
+        opcode_funcs[JSR] = &Obj::_op_JSR;
+        opcode_funcs[LDA] = &Obj::_op_LDA;
+        opcode_funcs[LDX] = &Obj::_op_LDX;
+        opcode_funcs[LDY] = &Obj::_op_LDY;
+        opcode_funcs[LSR] = &Obj::_op_LSR;
+        opcode_funcs[NOP] = &Obj::_op_NOP;
+        opcode_funcs[ORA] = &Obj::_op_ORA;
+        opcode_funcs[PHA] = &Obj::_op_PHA;
+        opcode_funcs[PHP] = &Obj::_op_PHP;
+        opcode_funcs[PLA] = &Obj::_op_PLA;
+        opcode_funcs[PLP] = &Obj::_op_PLP;
+        opcode_funcs[ROL] = &Obj::_op_ROL;
+        opcode_funcs[ROR] = &Obj::_op_ROR;
+        opcode_funcs[RTI] = &Obj::_op_RTI;
+        opcode_funcs[RTS] = &Obj::_op_RTS;
+        opcode_funcs[SBC] = &Obj::_op_SBC;
+        opcode_funcs[SEC] = &Obj::_op_SEC;
+        opcode_funcs[SED] = &Obj::_op_SED;
+        opcode_funcs[SEI] = &Obj::_op_SEI;
+        opcode_funcs[STA] = &Obj::_op_STA;
+        opcode_funcs[STX] = &Obj::_op_STX;
+        opcode_funcs[STY] = &Obj::_op_STY;
+        opcode_funcs[TAX] = &Obj::_op_TAX;
+        opcode_funcs[TAY] = &Obj::_op_TAY;
+        opcode_funcs[TSX] = &Obj::_op_TSX;
+        opcode_funcs[TXA] = &Obj::_op_TXA;
+        opcode_funcs[TXS] = &Obj::_op_TXS;
+        opcode_funcs[TYA] = &Obj::_op_TYA;
+
+        addrmode_funcs[RELATIVE]    = &Obj::_addrmode_relative;
+        addrmode_funcs[ABSOLUTE]    = &Obj::_addrmode_absolute;
+        addrmode_funcs[ZERO_PAGE]   = &Obj::_addrmode_zero_page;
+        addrmode_funcs[INDIRECT]    = &Obj::_addrmode_indirect;
+        addrmode_funcs[ABSOLUTE_X]  = &Obj::_addrmode_absolute_x;
+        addrmode_funcs[ABSOLUTE_Y]  = &Obj::_addrmode_absolute_y;
+        addrmode_funcs[ZERO_PAGE_X] = &Obj::_addrmode_zero_page_x;
+        addrmode_funcs[ZERO_PAGE_Y] = &Obj::_addrmode_zero_page_y;
+        addrmode_funcs[X_INDIRECT]  = &Obj::_addrmode_x_indirect;
+        addrmode_funcs[INDIRECT_Y]  = &Obj::_addrmode_indirect_y;
+    }
+
+    void reset() {
+        state               = State::RESET;
+        subcycle_counter    = 0;
+        actual_subcycle_max = 0;
+        memset(buffer, 0, sizeof(buffer));
+        cycle_count = 0;
+        current_instruction.reset();
+    }
+
+    void cycle();
+
+    uint8_t _read(uint16_t address);
+    void    _write(uint8_t data, uint16_t address);
+
+    void    _push(uint8_t data);
+    uint8_t _pop();
+
+    void _branch(bool do_branch);
+
+    // uint16_t _addrmode_accumulator();
+    // uint16_t _addrmode_immediate();
+    // uint16_t _addrmode_implied();
+    uint16_t _addrmode_relative();
+    uint16_t _addrmode_absolute();
+    uint16_t _addrmode_zero_page();
+    uint16_t _addrmode_indirect();
+    uint16_t _addrmode_absolute_x();
+    uint16_t _addrmode_absolute_y();
+    uint16_t _addrmode_zero_page_x();
+    uint16_t _addrmode_zero_page_y();
+    uint16_t _addrmode_x_indirect();
+    uint16_t _addrmode_indirect_y();
+
+    bool _op_ADC(Instruction &instr);
+    bool _op_AND(Instruction &instr);
+    bool _op_ASL(Instruction &instr);
+    bool _op_BCC(Instruction &instr);
+    bool _op_BCS(Instruction &instr);
+    bool _op_BEQ(Instruction &instr);
+    bool _op_BIT(Instruction &instr);
+    bool _op_BMI(Instruction &instr);
+    bool _op_BNE(Instruction &instr);
+    bool _op_BPL(Instruction &instr);
+    bool _op_BRK(Instruction &instr);
+    bool _op_BVC(Instruction &instr);
+    bool _op_BVS(Instruction &instr);
+    bool _op_CLC(Instruction &instr);
+    bool _op_CLD(Instruction &instr);
+    bool _op_CLI(Instruction &instr);
+    bool _op_CLV(Instruction &instr);
+    bool _op_CMP(Instruction &instr);
+    bool _op_CPX(Instruction &instr);
+    bool _op_CPY(Instruction &instr);
+    bool _op_DEC(Instruction &instr);
+    bool _op_DEX(Instruction &instr);
+    bool _op_DEY(Instruction &instr);
+    bool _op_EOR(Instruction &instr);
+    bool _op_INC(Instruction &instr);
+    bool _op_INX(Instruction &instr);
+    bool _op_INY(Instruction &instr);
+    bool _op_JMP(Instruction &instr);
+    bool _op_JSR(Instruction &instr);
+    bool _op_LDA(Instruction &instr);
+    bool _op_LDX(Instruction &instr);
+    bool _op_LDY(Instruction &instr);
+    bool _op_LSR(Instruction &instr);
+    bool _op_NOP(Instruction &instr);
+    bool _op_ORA(Instruction &instr);
+    bool _op_PHA(Instruction &instr);
+    bool _op_PHP(Instruction &instr);
+    bool _op_PLA(Instruction &instr);
+    bool _op_PLP(Instruction &instr);
+    bool _op_ROL(Instruction &instr);
+    bool _op_ROR(Instruction &instr);
+    bool _op_RTI(Instruction &instr);
+    bool _op_RTS(Instruction &instr);
+    bool _op_SBC(Instruction &instr);
+    bool _op_SEC(Instruction &instr);
+    bool _op_SED(Instruction &instr);
+    bool _op_SEI(Instruction &instr);
+    bool _op_STA(Instruction &instr);
+    bool _op_STX(Instruction &instr);
+    bool _op_STY(Instruction &instr);
+    bool _op_TAX(Instruction &instr);
+    bool _op_TAY(Instruction &instr);
+    bool _op_TSX(Instruction &instr);
+    bool _op_TXA(Instruction &instr);
+    bool _op_TXS(Instruction &instr);
+    bool _op_TYA(Instruction &instr);
+};
 
 inline constexpr const Instruction instructions[] = {
     // ADC (ADd with Carry)

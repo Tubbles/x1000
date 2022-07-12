@@ -9,6 +9,7 @@
         "*.json": "jsonc",
         "string": "cpp",
         "graphicscontext": "cpp",
-        "optional": "cpp"
+        "optional": "cpp",
+        "cstdlib": "cpp"
     }
 }

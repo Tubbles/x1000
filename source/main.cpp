@@ -9,6 +9,17 @@
 #include <spdlog/spdlog.h>
 #include <vector>
 
+#include <random>
+
+std::random_device                                       random_device;
+std::mt19937                                             random_number_generator(random_device());
+std::uniform_int_distribution<std::mt19937::result_type> distribution(0x00, 0xFF);
+
+enum {
+    SYS_RANDOM  = 0x00FE,
+    SYS_LASTKEY = 0x00FF,
+};
+
 auto get_current_time = std::chrono::steady_clock::now;
 using delta_time      = std::chrono::duration<float>;
 
@@ -33,6 +44,7 @@ int main(int argc, char *argv[]) {
     int           width, height, frame_count = 0;
 
     spdlog::set_level(spdlog::level::debug); // Set global log level
+    // spdlog::set_level(spdlog::level::trace); // Set global log level
 
     SDL_Init(SDL_INIT_EVERYTHING);
     TTF_Init();
@@ -60,15 +72,9 @@ int main(int argc, char *argv[]) {
         0xDD8855, 0x664400, 0xFF7777, 0x333333, 0x777777, 0xAAFF66, 0x0088FF, 0xBBBBBB,
     };
 
-    NES nes;
-    nes.cycle();
-    nes.cycle();
-    nes.cycle();
-    nes.cycle();
-    nes.cycle();
-    nes.cycle();
-    nes.cycle();
-    nes.cycle();
+    NES                     nes;
+    static constexpr Point  origin{110, 10};
+    static constexpr size_t frame_length = 32;
 
     while (running) {
         auto new_total_time = get_current_time();
@@ -92,6 +98,21 @@ int main(int argc, char *argv[]) {
             if ((event.key.keysym.sym == SDLK_q) && (event.key.keysym.mod & KMOD_CTRL)) {
                 running = false;
             }
+            if ((event.key.keysym.sym == SDLK_r) && (event.key.keysym.mod & KMOD_CTRL)) {
+                nes.reset();
+            }
+            if (event.key.keysym.sym == SDLK_w) {
+                nes.ram_backend[SYS_LASTKEY] = 'w';
+            }
+            if (event.key.keysym.sym == SDLK_a) {
+                nes.ram_backend[SYS_LASTKEY] = 'a';
+            }
+            if (event.key.keysym.sym == SDLK_s) {
+                nes.ram_backend[SYS_LASTKEY] = 's';
+            }
+            if (event.key.keysym.sym == SDLK_d) {
+                nes.ram_backend[SYS_LASTKEY] = 'd';
+            }
             break;
         }
         case SDL_QUIT: {
@@ -103,21 +124,48 @@ int main(int argc, char *argv[]) {
         }
         }
 
+        for (size_t i = 0; i < 3; i += 1) {
+            nes.ram_backend[SYS_RANDOM] = distribution(random_number_generator);
+            nes.cycle();
+        }
+
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         SDL_RenderClear(renderer);
-        for (size_t stack_counter = 0x01FF; stack_counter >= 0x0100; stack_counter -= 1) {
-            auto color_index = nes.ram_backend[stack_counter];
+
+        // Paint the frame
+        SDL_SetRenderDrawColor(renderer, cr(color_palette[15]), cg(color_palette[15]), cb(color_palette[15]), 255);
+        for (size_t x = 0; x < frame_length + 2; x += 1) {
+            // clang-format off
+            render_pixel({(int)(x) + origin.x - 1,              (int)(0) + origin.y - 1},               *renderer);
+            render_pixel({(int)(x) + origin.x - 1,              (int)(frame_length) + origin.y},        *renderer);
+            render_pixel({(int)(0) + origin.x - 1,              (int)(x) + origin.y - 1},               *renderer);
+            render_pixel({(int)(frame_length) + origin.x,       (int)(x) + origin.y - 1},               *renderer);
+            // clang-format on
+        }
+
+        // Paint the NES contents
+        for (size_t display_counter = 0x0200; display_counter < 0x0600; display_counter += 1) {
+            auto color_index = nes.ram_backend[display_counter];
             SDL_SetRenderDrawColor(renderer, cr(color_palette[color_index]), cg(color_palette[color_index]),
                                    cb(color_palette[color_index]), 255);
-            render_pixel({(int)(stack_counter % 16), (int)(stack_counter / 16)}, *renderer);
+            render_pixel({(int)(display_counter % 32) + origin.x, (int)((display_counter - 0x0200) / 32) + origin.y},
+                         *renderer);
         }
+
+        // Paint some random debug stuff
         SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
         render_pixel({(frame_count * 2) % (width / pixel_size), (frame_count) % (height / pixel_size)}, *renderer);
         render_pixel({100, 100}, *renderer);
+
+        // Paint FPS counter and resolution
         render_text(fmt::format("FPS: {:.2F}", fps).c_str(), {0, 0}, *renderer);
         render_text(fmt::format("{}x{}", (width / pixel_size), (height / pixel_size)).c_str(), {0, 14}, *renderer);
+
         SDL_RenderPresent(renderer);
     }
+
+    spdlog::set_level(spdlog::level::debug); // Set global log level
+    nes.print_mem(0x0200, 0x0400, 32);
 
     SDL_FreeCursor(cursor);
     TTF_CloseFont(font);
