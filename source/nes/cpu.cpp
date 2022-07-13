@@ -36,9 +36,9 @@ void Obj::cycle() {
             buffer[0] = _read(registers.program_counter);
             spdlog::trace("cpu: {} Grab next instruction {:02X} @ {:04X}", subcycle_counter, buffer[0],
                           registers.program_counter);
-            spdlog::trace("cpu: {} Current registers: A={:02X} X={:02X} Y={:02X} S={:02X} P={:02X}", subcycle_counter,
+            spdlog::trace("cpu: {} Current registers: A={:02X} X={:02X} Y={:02X} S={:02X} P=[{}]", subcycle_counter,
                           registers.accumulator, registers.index_register_x, registers.index_register_y,
-                          registers.stack_pointer, *(uint8_t *)&registers.processor_status);
+                          registers.stack_pointer, ps_to_string(registers.processor_status));
             current_instruction = Instruction::decode(buffer[0]);
             subcycle_counter    = 1;
             if (current_instruction.has_value()) {
@@ -70,11 +70,12 @@ void Obj::cycle() {
                 bufstr += fmt::format(" {:02X}", buffer[i]);
             }
             trim(bufstr);
-            spdlog::trace("cpu: {} Exec {},{} [{}]", subcycle_counter, mnem, instr.addr_mode, bufstr);
+            spdlog::trace("cpu: {} Exec {},{} [{}]", subcycle_counter, mnem, addrmode_to_string(instr.addr_mode),
+                          bufstr);
             auto ok = (*this.*opcode_funcs[instr.mnemonic])(instr);
             if (!ok) {
                 spdlog::error("CPU (@{}) OpCode not implemented or undefined: {},{}", cycle_count, mnem,
-                              instr.addr_mode);
+                              addrmode_to_string(instr.addr_mode));
                 state = State::HALT;
             }
             subcycle_counter += 1;
@@ -199,11 +200,14 @@ uint16_t Obj::_addrmode_zero_page() {
 // For example if location $0120 contains $FC and location $0121 contains $BA then the instruction JMP ($0120) will
 // cause the next instruction execution to occur at $BAFC (e.g. the contents of $0120 and $0121).
 // Num arg bytes: 3, num clock cycles: 5
-uint16_t Obj::_addrmode_indirect() {
-    spdlog::error("CPU (@{}) AddrMode not implemented or undefined: {},{}", cycle_count,
-                  current_instruction.value().mnemonic, current_instruction.value().addr_mode);
-    state = State::HALT;
-    return 0;
+uint16_t Obj::_addrmode_indirect1() {
+    // First read the low address byte
+    return _read(u16_des(&buffer[1]));
+}
+
+uint16_t Obj::_addrmode_indirect2(uint16_t laddr) {
+    // Then read the rest of the address
+    return laddr | (((uint16_t)_read(u16_des(&buffer[1]) + 1)) << 8);
 }
 
 // The address to be accessed by an instruction using X register indexed absolute addressing is computed by taking
@@ -245,23 +249,28 @@ uint16_t Obj::_addrmode_zero_page_y() {
 // address of the table is taken from the instruction and the X register added to it (with zero page wrap around) to
 // give the location of the least significant byte of the target address.
 // Num arg bytes: 2, num clock cycles: 6
-uint16_t Obj::_addrmode_x_indirect() {
-    spdlog::error("CPU (@{}) AddrMode not implemented or undefined: {},{}", cycle_count,
-                  current_instruction.value().mnemonic, current_instruction.value().addr_mode);
-    state = State::HALT;
-    return 0;
+uint16_t Obj::_addrmode_x_indirect1() {
+    // First read the low address byte
+    return _read(u8_des(&buffer[1]) + registers.index_register_x);
 }
 
-// Indirect indirect addressing is the most common indirection mode used on the 6502. In instruction contains the
+uint16_t Obj::_addrmode_x_indirect2(uint16_t laddr) {
+    // Then read the rest of the address
+    return laddr | (((uint16_t)_read(u8_des(&buffer[1]) + registers.index_register_x + ((uint8_t)1))) << 8);
+}
+
+// Indirect indexed addressing is the most common indirection mode used on the 6502. In instruction contains the
 // zero page location of the least significant byte of 16 bit address. The Y register is dynamically added to this
 // value to generated the actual target address for operation.
 // Num arg bytes: 2, num clock cycles: differs
-uint16_t Obj::_addrmode_indirect_y() {
-    spdlog::error("CPU (@{}) AddrMode not implemented or undefined: {},{}", cycle_count,
-                  current_instruction.value().mnemonic, current_instruction.value().addr_mode);
-    state = State::HALT;
-    // return _read(&buffer[1]) + registers.index_register_y;
-    return 0;
+uint16_t Obj::_addrmode_indirect_y1() {
+    // First read the low address byte
+    return _read(u8_des(&buffer[1]));
+}
+
+uint16_t Obj::_addrmode_indirect_y2(uint16_t laddr) {
+    // Then read the rest of the address
+    return (laddr | (((uint16_t)_read(u8_des(&buffer[1]) + 1)) << 8)) + registers.index_register_y;
 }
 
 // ADC – Add with Carry
@@ -460,7 +469,20 @@ bool Obj::_op_BEQ(Instruction &instr) {
 // Zero Page 2 3
 // Absolute 3 4
 bool Obj::_op_BIT(Instruction &instr) {
+    uint8_t result;
     switch (instr.addr_mode) {
+    case ABSOLUTE: {
+        if (subcycle_counter == actual_subcycle_max) {
+            result = registers.accumulator & _read(_addrmode_absolute());
+        }
+        break;
+    }
+    case ZERO_PAGE: {
+        if (subcycle_counter == actual_subcycle_max) {
+            result = registers.accumulator & _read(_addrmode_zero_page());
+        }
+        break;
+    }
     default: {
         // Unknown addressing mode
         return false;
@@ -469,6 +491,9 @@ bool Obj::_op_BIT(Instruction &instr) {
 
     // Set flags
     if (subcycle_counter == actual_subcycle_max) {
+        registers.processor_status.z = (result == 0);
+        registers.processor_status.v = ((result & 0x40) != 0);
+        registers.processor_status.n = ((result & 0x80) != 0);
     }
 
     return true;
@@ -965,6 +990,16 @@ bool Obj::_op_EOR(Instruction &instr) {
 // Absolute,X 3 7
 bool Obj::_op_INC(Instruction &instr) {
     switch (instr.addr_mode) {
+    case ZERO_PAGE: {
+        if (subcycle_counter == actual_subcycle_max - 1) {
+            buffer[3] = _read(_addrmode_zero_page());
+            buffer[3] += 1;
+        }
+        if (subcycle_counter == actual_subcycle_max) {
+            _write(buffer[3], _addrmode_zero_page());
+        }
+        break;
+    }
     default: {
         // Unknown addressing mode
         return false;
@@ -1048,6 +1083,12 @@ bool Obj::_op_INY(Instruction &instr) {
 // Indirect  3 5
 bool Obj::_op_JMP(Instruction &instr) {
     switch (instr.addr_mode) {
+    case ABSOLUTE: {
+        if (subcycle_counter == actual_subcycle_max) {
+            registers.program_counter = _addrmode_absolute();
+        }
+        break;
+    }
     default: {
         // Unknown addressing mode
         return false;
@@ -1252,6 +1293,9 @@ bool Obj::_op_LSR(Instruction &instr) {
 // Implied 1 2
 bool Obj::_op_NOP(Instruction &instr) {
     switch (instr.addr_mode) {
+    case IMPLIED: {
+        break;
+    }
     default: {
         // Unknown addressing mode
         return false;
@@ -1659,14 +1703,34 @@ bool Obj::_op_STA(Instruction &instr) {
         }
         break;
     }
-    // case INDIRECT_Y: {
-    //     if (subcycle_counter == actual_subcycle_max - 1) {
-    //         _addrmode_indirect_y();
-    //     }
-    //     if (subcycle_counter == actual_subcycle_max) {
-    //     }
-    //     break;
-    // }
+    case X_INDIRECT: {
+        if (subcycle_counter == actual_subcycle_max - 2) {
+            buffer[3] = 0x00;
+            buffer[4] = 0x00;
+            u16_ser(&buffer[3], _addrmode_x_indirect1());
+        }
+        if (subcycle_counter == actual_subcycle_max - 1) {
+            u16_ser(&buffer[3], _addrmode_x_indirect2(u16_des(&buffer[3])));
+        }
+        if (subcycle_counter == actual_subcycle_max) {
+            _write(registers.accumulator, u16_des(&buffer[3]));
+        }
+        break;
+    }
+    case INDIRECT_Y: {
+        if (subcycle_counter == actual_subcycle_max - 2) {
+            buffer[3] = 0x00;
+            buffer[4] = 0x00;
+            u16_ser(&buffer[3], _addrmode_indirect_y1());
+        }
+        if (subcycle_counter == actual_subcycle_max - 1) {
+            u16_ser(&buffer[3], _addrmode_indirect_y2(u16_des(&buffer[3])));
+        }
+        if (subcycle_counter == actual_subcycle_max) {
+            _write(registers.accumulator, u16_des(&buffer[3]));
+        }
+        break;
+    }
     default: {
         // Unknown addressing mode
         return false;

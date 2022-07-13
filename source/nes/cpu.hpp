@@ -159,6 +159,13 @@ enum {
     INDIRECT_Y, // 12, Num arg bytes: 2, num clock cycles: differs
 };
 
+inline std::string addrmode_to_string(uint8_t addrmode) {
+    static const std::string list[] = {
+        "acc", "imm", "impl", "rel", "abs", "zpage", "indi", "absx", "absy", "zpagex", "zpagey", "xindi", "indiy",
+    };
+    return list[addrmode];
+}
+
 struct Instruction {
     const char *mnemonic                      = nullptr;
     uint8_t     opcode                        = 0;
@@ -253,16 +260,16 @@ struct Obj {
         opcode_funcs[TXS] = &Obj::_op_TXS;
         opcode_funcs[TYA] = &Obj::_op_TYA;
 
-        addrmode_funcs[RELATIVE]    = &Obj::_addrmode_relative;
-        addrmode_funcs[ABSOLUTE]    = &Obj::_addrmode_absolute;
-        addrmode_funcs[ZERO_PAGE]   = &Obj::_addrmode_zero_page;
-        addrmode_funcs[INDIRECT]    = &Obj::_addrmode_indirect;
+        addrmode_funcs[RELATIVE]  = &Obj::_addrmode_relative;
+        addrmode_funcs[ABSOLUTE]  = &Obj::_addrmode_absolute;
+        addrmode_funcs[ZERO_PAGE] = &Obj::_addrmode_zero_page;
+        // addrmode_funcs[INDIRECT]    = &Obj::_addrmode_indirect;
         addrmode_funcs[ABSOLUTE_X]  = &Obj::_addrmode_absolute_x;
         addrmode_funcs[ABSOLUTE_Y]  = &Obj::_addrmode_absolute_y;
         addrmode_funcs[ZERO_PAGE_X] = &Obj::_addrmode_zero_page_x;
         addrmode_funcs[ZERO_PAGE_Y] = &Obj::_addrmode_zero_page_y;
-        addrmode_funcs[X_INDIRECT]  = &Obj::_addrmode_x_indirect;
-        addrmode_funcs[INDIRECT_Y]  = &Obj::_addrmode_indirect_y;
+        // addrmode_funcs[X_INDIRECT]  = &Obj::_addrmode_x_indirect;
+        // addrmode_funcs[INDIRECT_Y]  = &Obj::_addrmode_indirect_y;
     }
 
     void reset() {
@@ -290,13 +297,16 @@ struct Obj {
     uint16_t _addrmode_relative();
     uint16_t _addrmode_absolute();
     uint16_t _addrmode_zero_page();
-    uint16_t _addrmode_indirect();
+    uint16_t _addrmode_indirect1();
+    uint16_t _addrmode_indirect2(uint16_t laddr);
     uint16_t _addrmode_absolute_x();
     uint16_t _addrmode_absolute_y();
     uint16_t _addrmode_zero_page_x();
     uint16_t _addrmode_zero_page_y();
-    uint16_t _addrmode_x_indirect();
-    uint16_t _addrmode_indirect_y();
+    uint16_t _addrmode_x_indirect1();
+    uint16_t _addrmode_x_indirect2(uint16_t laddr);
+    uint16_t _addrmode_indirect_y1();
+    uint16_t _addrmode_indirect_y2(uint16_t laddr);
 
     bool _op_ADC(Instruction &instr);
     bool _op_AND(Instruction &instr);

@@ -2,6 +2,7 @@
 
 #include "cpu.hpp"
 #include "mem.hpp"
+#include "source/globals.hpp"
 #include <cstring>
 #include <iostream>
 #include <spdlog/spdlog.h>
@@ -180,5 +181,6 @@ struct NES {
 
     void cycle() {
         cpu.cycle();
+        total_cycle_count += 1;
     }
 };

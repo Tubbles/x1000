@@ -43,8 +43,8 @@ int main(int argc, char *argv[]) {
     SDL_Window   *window   = NULL;
     int           width, height, frame_count = 0;
 
-    spdlog::set_level(spdlog::level::debug); // Set global log level
-    // spdlog::set_level(spdlog::level::trace); // Set global log level
+    // spdlog::set_level(spdlog::level::debug); // Set global log level
+    spdlog::set_level(spdlog::level::trace); // Set global log level
 
     SDL_Init(SDL_INIT_EVERYTHING);
     TTF_Init();
@@ -101,17 +101,10 @@ int main(int argc, char *argv[]) {
             if ((event.key.keysym.sym == SDLK_r) && (event.key.keysym.mod & KMOD_CTRL)) {
                 nes.reset();
             }
-            if (event.key.keysym.sym == SDLK_w) {
-                nes.ram_backend[SYS_LASTKEY] = 'w';
-            }
-            if (event.key.keysym.sym == SDLK_a) {
-                nes.ram_backend[SYS_LASTKEY] = 'a';
-            }
-            if (event.key.keysym.sym == SDLK_s) {
-                nes.ram_backend[SYS_LASTKEY] = 's';
-            }
-            if (event.key.keysym.sym == SDLK_d) {
-                nes.ram_backend[SYS_LASTKEY] = 'd';
+            if ((event.key.keysym.sym == SDLK_w) || (event.key.keysym.sym == SDLK_a) ||
+                (event.key.keysym.sym == SDLK_s) || (event.key.keysym.sym == SDLK_d)) {
+                nes.ram_backend[SYS_LASTKEY] = event.key.keysym.sym;
+                spdlog::debug("Keypress: {:02X}", nes.ram_backend[SYS_LASTKEY]);
             }
             break;
         }
@@ -124,7 +117,7 @@ int main(int argc, char *argv[]) {
         }
         }
 
-        for (size_t i = 0; i < 3; i += 1) {
+        for (size_t i = 0; i < 500; i += 1) {
             nes.ram_backend[SYS_RANDOM] = distribution(random_number_generator);
             nes.cycle();
         }
@@ -145,7 +138,7 @@ int main(int argc, char *argv[]) {
 
         // Paint the NES contents
         for (size_t display_counter = 0x0200; display_counter < 0x0600; display_counter += 1) {
-            auto color_index = nes.ram_backend[display_counter];
+            auto color_index = nes.ram_backend[display_counter] % 16;
             SDL_SetRenderDrawColor(renderer, cr(color_palette[color_index]), cg(color_palette[color_index]),
                                    cb(color_palette[color_index]), 255);
             render_pixel({(int)(display_counter % 32) + origin.x, (int)((display_counter - 0x0200) / 32) + origin.y},
@@ -166,6 +159,7 @@ int main(int argc, char *argv[]) {
 
     spdlog::set_level(spdlog::level::debug); // Set global log level
     nes.print_mem(0x0200, 0x0400, 32);
+    nes.print_mem(SYS_RANDOM, 2);
 
     SDL_FreeCursor(cursor);
     TTF_CloseFont(font);

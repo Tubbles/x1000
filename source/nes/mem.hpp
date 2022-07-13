@@ -2,6 +2,7 @@
 
 #include "chip.hpp"
 #include "source/bus.hpp"
+#include "source/globals.hpp"
 #include "source/util.hpp"
 #include <cstddef>
 #include <cstdint>
@@ -35,14 +36,14 @@ struct Memory {
         auto offset = address - me->address_start;
         if (!write) {
             me->data_bus.put(me->backend[offset]);
-            spdlog::trace("{} read: {:02X} @ {:04X}", me->name, me->backend[offset], address);
+            spdlog::trace("[{}] {} read: {:02X} @ {:04X}", total_cycle_count, me->name, me->backend[offset], address);
             return true;
         } else if (me->writeable) {
             me->backend[offset] = data;
-            spdlog::trace("{} write: {:02X} @ {:04X}", me->name, me->backend[offset], address);
+            spdlog::trace("[{}] {} write: {:02X} @ {:04X}", total_cycle_count, me->name, me->backend[offset], address);
             return true;
         } else {
-            spdlog::trace("{} write: {:02X} @ {:04X} NON-WRITEABLE!", me->name, data, address);
+            spdlog::trace("[{}] {} write: {:02X} @ {:04X} NON-WRITEABLE!", total_cycle_count, me->name, data, address);
             return false;
         }
     }
@@ -96,6 +97,19 @@ struct ProcessorStatus {
     uint8_t z : 1; //!< Zero flag
     uint8_t c : 1; //!< Carry flag
 };
+
+inline std::string ps_to_string(ProcessorStatus ps) {
+    std::string out = "";
+    out += ((*(uint8_t *)&ps) & 0x01) ? "N" : "_";
+    out += ((*(uint8_t *)&ps) & 0x02) ? "V" : "_";
+    out += ((*(uint8_t *)&ps) & 0x04) ? "-" : "_";
+    out += ((*(uint8_t *)&ps) & 0x08) ? "B" : "_";
+    out += ((*(uint8_t *)&ps) & 0x10) ? "D" : "_";
+    out += ((*(uint8_t *)&ps) & 0x20) ? "I" : "_";
+    out += ((*(uint8_t *)&ps) & 0x40) ? "Z" : "_";
+    out += ((*(uint8_t *)&ps) & 0x80) ? "C" : "_";
+    return out;
+}
 
 static_assert(sizeof(ProcessorStatus) == 1);
 
