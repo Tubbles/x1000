@@ -20,5 +20,5 @@ fi
 mkdir -p "${conan_dir}"
 
 conan install .. --build=missing &&
-    cmake .. -G Ninja &&
+    CMAKE_BUILD_TYPE=Release cmake .. -G Ninja &&
     ninja "$@"

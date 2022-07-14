@@ -33,9 +33,8 @@ void Obj::cycle() {
     case State::RUN: {
         if (!current_instruction.has_value()) {
             // Grab next instruction
+            spdlog::trace("cpu: {} Grab next instruction @ {:04X}", subcycle_counter, registers.program_counter);
             buffer[0] = _read(registers.program_counter);
-            spdlog::trace("cpu: {} Grab next instruction {:02X} @ {:04X}", subcycle_counter, buffer[0],
-                          registers.program_counter);
             spdlog::trace("cpu: {} Current registers: A={:02X} X={:02X} Y={:02X} S={:02X} P=[{}]", subcycle_counter,
                           registers.accumulator, registers.index_register_x, registers.index_register_y,
                           registers.stack_pointer, ps_to_string(registers.processor_status));
@@ -1266,9 +1265,11 @@ bool Obj::_op_LSR(Instruction &instr) {
     uint8_t old, result;
     switch (instr.addr_mode) {
     case ACCUMULATOR: {
-        old = registers.accumulator;
-        registers.accumulator >>= 1U;
-        result = registers.accumulator;
+        if (subcycle_counter == actual_subcycle_max) {
+            old = registers.accumulator;
+            registers.accumulator >>= 1U;
+            result = registers.accumulator;
+        }
         break;
     }
     default: {

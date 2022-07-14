@@ -43,14 +43,14 @@ int main(int argc, char *argv[]) {
     SDL_Window   *window   = NULL;
     int           width, height, frame_count = 0;
 
-    // spdlog::set_level(spdlog::level::debug); // Set global log level
-    spdlog::set_level(spdlog::level::trace); // Set global log level
+    spdlog::set_level(spdlog::level::debug); // Set global log level
+    // spdlog::set_level(spdlog::level::trace); // Set global log level
 
     SDL_Init(SDL_INIT_EVERYTHING);
     TTF_Init();
     font = TTF_OpenFont("/usr/share/fonts/TTF/Inconsolata-Regular.ttf", 14);
     SDL_CreateWindowAndRenderer(640, 480, SDL_WINDOW_FULLSCREEN_DESKTOP, &window, &renderer);
-    SDL_RenderSetVSync(renderer, true);
+    // SDL_RenderSetVSync(renderer, true);
     SDL_GetWindowSize(window, &width, &height);
 
     auto cursor_surface = SDL_CreateRGBSurface(0, 8 * pixel_size, 8 * pixel_size, 32, 0, 0, 0, 0);
@@ -92,34 +92,42 @@ int main(int argc, char *argv[]) {
         }
 
         frame_count += 1;
-        SDL_PollEvent(&event);
-        switch (event.type) {
-        case SDL_KEYDOWN: {
-            if ((event.key.keysym.sym == SDLK_q) && (event.key.keysym.mod & KMOD_CTRL)) {
+        while (SDL_PollEvent(&event)) {
+            switch (event.type) {
+            case SDL_KEYDOWN: {
+                if ((event.key.keysym.sym == SDLK_q) && (event.key.keysym.mod & KMOD_CTRL)) {
+                    running = false;
+                }
+                if ((event.key.keysym.sym == SDLK_r) && (event.key.keysym.mod & KMOD_CTRL)) {
+                    nes.reset();
+                }
+                if ((event.key.keysym.sym == SDLK_w) || (event.key.keysym.sym == SDLK_a) ||
+                    (event.key.keysym.sym == SDLK_s) || (event.key.keysym.sym == SDLK_d)) {
+                    nes.ram_backend[SYS_LASTKEY] = event.key.keysym.sym;
+                    // spdlog::debug("Keypress: {:02X}", nes.ram_backend[SYS_LASTKEY]);
+                }
+                break;
+            }
+            case SDL_QUIT: {
                 running = false;
+                break;
             }
-            if ((event.key.keysym.sym == SDLK_r) && (event.key.keysym.mod & KMOD_CTRL)) {
-                nes.reset();
+            default: {
+                break;
             }
-            if ((event.key.keysym.sym == SDLK_w) || (event.key.keysym.sym == SDLK_a) ||
-                (event.key.keysym.sym == SDLK_s) || (event.key.keysym.sym == SDLK_d)) {
-                nes.ram_backend[SYS_LASTKEY] = event.key.keysym.sym;
-                spdlog::debug("Keypress: {:02X}", nes.ram_backend[SYS_LASTKEY]);
             }
-            break;
-        }
-        case SDL_QUIT: {
-            running = false;
-            break;
-        }
-        default: {
-            break;
-        }
         }
 
-        for (size_t i = 0; i < 500; i += 1) {
+        // 1.7897725 MHz
+        // 1789.7725 kHz
+        // 1789772.5 Hz
+        // Loop = 1/60 s = 60 Hz, 1789772.5 / 60 = 29829.54
+        for (size_t i = 0; i < 29830; i += 1) {
             nes.ram_backend[SYS_RANDOM] = distribution(random_number_generator);
             nes.cycle();
+            if (nes.cpu.state == cpu::Obj::State::HALT) {
+                nes.reset();
+            }
         }
 
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
