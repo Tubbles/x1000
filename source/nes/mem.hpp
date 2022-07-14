@@ -55,7 +55,7 @@ struct Memory {
         // address_bus.set_callback(bus_level_updated);
         // data_bus.set_callback(bus_level_updated);
         // write_signal.set_callback(bus_level_updated);
-        spdlog::debug("Setting up memory @ {:04X} [{:04X}]", address_start, size);
+        spdlog::debug("Setting up memory @ {:04X} [{:04X}]: {}", address_start, size, name);
     }
 };
 

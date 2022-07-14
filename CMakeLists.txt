@@ -60,7 +60,7 @@ target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE
     -Wall
     -Wextra
     -pedantic
-    -Werror
+    # -Werror
 )
 
 target_link_libraries(${CMAKE_PROJECT_NAME}
@@ -86,7 +86,7 @@ target_compile_options(${CMAKE_PROJECT_NAME}_test PRIVATE
     -Wall
     -Wextra
     -pedantic
-    -Werror
+    # -Werror
 )
 
 target_link_libraries(${CMAKE_PROJECT_NAME}_test

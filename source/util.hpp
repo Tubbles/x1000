@@ -2,8 +2,11 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <fstream>
+#include <iterator>
 #include <locale>
 #include <string>
+#include <vector>
 
 #define ARR_LEN(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))
 
@@ -53,4 +56,12 @@ inline std::string &rtrim(std::string &str) {
 
 inline std::string &trim(std::string &str) {
     return ltrim(rtrim(str));
+}
+
+inline std::vector<uint8_t> binary_file_to_vector(const std::string &filename) {
+    // open the file:
+    std::ifstream file(filename, std::ios::binary);
+
+    // read the data:
+    return std::vector<uint8_t>((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 }

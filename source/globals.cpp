@@ -1,5 +1,5 @@
 #include "globals.hpp"
 
-const int pixel_size = 8;
+int       pixel_size = 16;
 TTF_Font *font;
 size_t    total_cycle_count = 0;
