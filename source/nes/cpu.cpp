@@ -1165,6 +1165,12 @@ bool Obj::_op_LDA(Instruction &instr) {
         }
         break;
     }
+    case ABSOLUTE: {
+        if (subcycle_counter == actual_subcycle_max) {
+            registers.accumulator = _read(_addrmode_absolute());
+        }
+        break;
+    }
     default: {
         // Unknown addressing mode
         return false;
@@ -1887,6 +1893,12 @@ bool Obj::_op_TXA(Instruction &instr) {
 // Implied 1 2
 bool Obj::_op_TXS(Instruction &instr) {
     switch (instr.addr_mode) {
+    case IMPLIED: {
+        if (subcycle_counter == actual_subcycle_max) {
+            registers.stack_pointer = registers.index_register_x;
+        }
+        break;
+    }
     default: {
         // Unknown addressing mode
         return false;

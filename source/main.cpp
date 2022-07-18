@@ -48,9 +48,9 @@ int main(int argc, char *argv[]) {
 #ifdef NDEBUG
     spdlog::set_level(spdlog::level::warn); // Set global log level
 #else
-    spdlog::set_level(spdlog::level::debug); // Set global log level
+    // spdlog::set_level(spdlog::level::debug); // Set global log level
 
-    // spdlog::set_level(spdlog::level::trace); // Set global log level
+    spdlog::set_level(spdlog::level::trace); // Set global log level
 #endif
 
     SDL_Init(SDL_INIT_EVERYTHING);
@@ -120,6 +120,7 @@ int main(int argc, char *argv[]) {
         }
 
         frame_count += 1;
+
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
             case SDL_KEYDOWN: {
@@ -150,8 +151,10 @@ int main(int argc, char *argv[]) {
         // 1789.7725 kHz
         // 1789772.5 Hz
         // Loop = 1/60 s = 60 Hz, 1789772.5 / 60 ~ 29830
-        for (size_t i = 0; i < 1250; i += 1) {
-            nes.ram_backend[SYS_RANDOM] = distribution(random_number_generator);
+        // constexpr const size_t nes_loops = 1250;
+        constexpr const size_t nes_loops = 29830;
+        for (size_t i = 0; i < nes_loops; i += 1) {
+            // nes.ram_backend[SYS_RANDOM] = distribution(random_number_generator);
             nes.cycle();
             // if (nes.cpu.state == cpu::Obj::State::HALT) {
             //     nes.reset();
@@ -172,25 +175,25 @@ int main(int argc, char *argv[]) {
             render_pixel({target_frame_size.x + nes_origin.x, y + nes_origin.y - 1}, *renderer);
         }
 
-        // Paint the small 32x32 frame
-        SDL_SetRenderDrawColor(renderer, cr(color_palette[15]), cg(color_palette[15]), cb(color_palette[15]), 255);
-        for (int x = 0; x < frame_length + 2; x += 1) {
-            // clang-format off
-            render_pixel({x + origin.x - 1,         origin.y - 1},              *renderer);
-            render_pixel({x + origin.x - 1,         frame_length + origin.y},   *renderer);
-            render_pixel({origin.x - 1,             x + origin.y - 1},          *renderer);
-            render_pixel({frame_length + origin.x,  x + origin.y - 1},          *renderer);
-            // clang-format on
-        }
+        // // Paint the small 32x32 frame
+        // SDL_SetRenderDrawColor(renderer, cr(color_palette[15]), cg(color_palette[15]), cb(color_palette[15]), 255);
+        // for (int x = 0; x < frame_length + 2; x += 1) {
+        //     // clang-format off
+        //     render_pixel({x + origin.x - 1,         origin.y - 1},              *renderer);
+        //     render_pixel({x + origin.x - 1,         frame_length + origin.y},   *renderer);
+        //     render_pixel({origin.x - 1,             x + origin.y - 1},          *renderer);
+        //     render_pixel({frame_length + origin.x,  x + origin.y - 1},          *renderer);
+        //     // clang-format on
+        // }
 
-        // Paint the NES contents
-        for (size_t display_counter = 0x0200; display_counter < 0x0600; display_counter += 1) {
-            auto color_index = nes.ram_backend[display_counter] % 16;
-            SDL_SetRenderDrawColor(renderer, cr(color_palette[color_index]), cg(color_palette[color_index]),
-                                   cb(color_palette[color_index]), 255);
-            render_pixel({(int)(display_counter % 32) + origin.x, (int)((display_counter - 0x0200) / 32) + origin.y},
-                         *renderer);
-        }
+        // // Paint the NES contents
+        // for (size_t display_counter = 0x0200; display_counter < 0x0600; display_counter += 1) {
+        //     auto color_index = nes.ram_backend[display_counter] % 16;
+        //     SDL_SetRenderDrawColor(renderer, cr(color_palette[color_index]), cg(color_palette[color_index]),
+        //                            cb(color_palette[color_index]), 255);
+        //     render_pixel({(int)(display_counter % 32) + origin.x, (int)((display_counter - 0x0200) / 32) + origin.y},
+        //                  *renderer);
+        // }
 
         // Paint some random debug stuff
         // SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
@@ -198,6 +201,7 @@ int main(int argc, char *argv[]) {
         // render_pixel({100, 100}, *renderer);
 
         // Paint FPS counter and resolution
+        SDL_SetRenderDrawColor(renderer, cr(color_palette[15]), cg(color_palette[15]), cb(color_palette[15]), 255);
         render_text(fmt::format("FPS: {:.2F}", fps).c_str(), {0, 0}, *renderer);
         render_text(fmt::format("{}x{}", (width / pixel_size), (height / pixel_size)).c_str(), {0, 14}, *renderer);
         render_text(fmt::format("Pixelsize: {}", pixel_size).c_str(), {0, 28}, *renderer);

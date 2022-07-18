@@ -192,6 +192,7 @@ struct NES {
 
         // Read in the data
         auto rom_start = 16 + (has_trainer ? 512 : 0);
+        spdlog::debug("Reading in cartridge contents");
         // auto vrom_start = rom_start + rom_size;
         cpu_write_mem(cpumem::PRG_ROM_START, &raw[rom_start], rom_size);
 
@@ -235,6 +236,7 @@ struct NES {
     }
 
     void reset() {
+        spdlog::debug("Resetting NES");
         memset(&cpu_registers, 0, sizeof(cpu_registers));
         memset(&ram_backend, 0, sizeof(ram_backend));
         // cpu_registers.program_counter = 0xFFFC;
