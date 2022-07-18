@@ -66,8 +66,8 @@ int main(int argc, char *argv[]) {
     SDL_RenderSetVSync(renderer, true);
     SDL_GetWindowSize(window, &width, &height);
 
-    pixel_size = width / target_frame_size.x + (!!(width % target_frame_size.x));
-    pixel_size = std::min(pixel_size, height / target_frame_size.y + (!!(height % target_frame_size.y)));
+    pixel_size = std::min((int)std::floor(((float)width) / ((float)target_frame_size.x)),
+                          (int)std::floor(((float)height) / ((float)target_frame_size.y)));
     // spdlog::debug("pixel_size = {}", pixel_size);
 
     auto cursor_surface = SDL_CreateRGBSurface(0, 8 * pixel_size, 8 * pixel_size, 32, 0, 0, 0, 0);

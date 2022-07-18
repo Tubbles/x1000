@@ -11,6 +11,7 @@
         "graphicscontext": "cpp",
         "optional": "cpp",
         "cstdlib": "cpp",
-        "*.tcc": "cpp"
+        "*.tcc": "cpp",
+        "cmath": "cpp"
     }
 }
