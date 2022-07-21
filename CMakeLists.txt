@@ -36,6 +36,7 @@ set(common_libraries
     SDL2_ttf
     Catch2::Catch2
     spdlog::spdlog
+    CONAN_PKG::argparse
 )
 
 set(common_include_directories

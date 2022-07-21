@@ -12,6 +12,7 @@
         "optional": "cpp",
         "cstdlib": "cpp",
         "*.tcc": "cpp",
-        "cmath": "cpp"
+        "cmath": "cpp",
+        "limits": "cpp"
     }
 }

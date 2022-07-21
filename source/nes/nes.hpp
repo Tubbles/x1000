@@ -4,82 +4,42 @@
 #include "cpu.hpp"
 #include "mem.hpp"
 #include "source/globals.hpp"
+#include "source/util.hpp"
 #include <cstring>
 #include <spdlog/spdlog.h>
 
-// TODO : Remove this!
-// static uint8_t program[] = {
-//     // clang-format off
-//     //   LDX #$00
-//     0xA2, 0x00, // 0x0600
-//     //   LDY #$00
-//     0xA0, 0x00, // 0x0602
-//     // firstloop:
-//     //   TXA
-//     0x8A, // 0x0604
-//     //   STA $0200,Y
-//     0x99, 0x00, 0x02,  // 0x0605
-//     //   PHA
-//     0x48, // 0x0608
-//     //   INX
-//     0xE8, // 0x0609
-//     //   INY
-//     0xC8, // 0x060A
-//     //   CPY #$10
-//     0xC0, 0x10, // 0x060B
-//     //   BNE firstloop ;loop until Y is $10
-//     0xD0, 0xF5, // 0x060D
-//     // secondloop:
-//     //   PLA
-//     0x68, // 0x060F
-//     //   STA $0200,Y
-//     0x99, 0x00, 0x02, // 0x0610
-//     //   INY
-//     0xC8, // 0x0613
-//     //   CPY #$20      ;loop until Y is $20
-//     0xC0, 0x20, // 0x0614
-//     //   BNE secondloop
-//     0xD0, 0xF7, // 0x0616
-//     // clang-format on
-// };
-
-// static uint8_t program[] = {
-//     0x20, 0x06, 0x06, 0x20, 0x38, 0x06, 0x20, 0x0D, 0x06, 0x20, 0x2A, 0x06, 0x60, 0xA9, 0x02, 0x85, 0x02, 0xA9, 0x04,
-//     0x85, 0x03, 0xA9, 0x11, 0x85, 0x10, 0xA9, 0x10, 0x85, 0x12, 0xA9, 0x0F, 0x85, 0x14, 0xA9, 0x04, 0x85, 0x11, 0x85,
-//     0x13, 0x85, 0x15, 0x60, 0xA5, 0xFE, 0x85, 0x00, 0xA5, 0xFE, 0x29, 0x03, 0x18, 0x69, 0x02, 0x85, 0x01, 0x60, 0x20,
-//     0x4D, 0x06, 0x20, 0x8D, 0x06, 0x20, 0xC3, 0x06, 0x20, 0x19, 0x07, 0x20, 0x20, 0x07, 0x20, 0x2D, 0x07, 0x4C, 0x38,
-//     0x06, 0xA5, 0xFF, 0xC9, 0x77, 0xF0, 0x0D, 0xC9, 0x64, 0xF0, 0x14, 0xC9, 0x73, 0xF0, 0x1B, 0xC9, 0x61, 0xF0, 0x22,
-//     0x60, 0xA9, 0x04, 0x24, 0x02, 0xD0, 0x26, 0xA9, 0x01, 0x85, 0x02, 0x60, 0xA9, 0x08, 0x24, 0x02, 0xD0, 0x1B, 0xA9,
-//     0x02, 0x85, 0x02, 0x60, 0xA9, 0x01, 0x24, 0x02, 0xD0, 0x10, 0xA9, 0x04, 0x85, 0x02, 0x60, 0xA9, 0x02, 0x24, 0x02,
-//     0xD0, 0x05, 0xA9, 0x08, 0x85, 0x02, 0x60, 0x60, 0x20, 0x94, 0x06, 0x20, 0xA8, 0x06, 0x60, 0xA5, 0x00, 0xC5, 0x10,
-//     0xD0, 0x0D, 0xA5, 0x01, 0xC5, 0x11, 0xD0, 0x07, 0xE6, 0x03, 0xE6, 0x03, 0x20, 0x2A, 0x06, 0x60, 0xA2, 0x02, 0xB5,
-//     0x10, 0xC5, 0x10, 0xD0, 0x06, 0xB5, 0x11, 0xC5, 0x11, 0xF0, 0x09, 0xE8, 0xE8, 0xE4, 0x03, 0xF0, 0x06, 0x4C, 0xAA,
-//     0x06, 0x4C, 0x35, 0x07, 0x60, 0xA6, 0x03, 0xCA, 0x8A, 0xB5, 0x10, 0x95, 0x12, 0xCA, 0x10, 0xF9, 0xA5, 0x02, 0x4A,
-//     0xB0, 0x09, 0x4A, 0xB0, 0x19, 0x4A, 0xB0, 0x1F, 0x4A, 0xB0, 0x2F, 0xA5, 0x10, 0x38, 0xE9, 0x20, 0x85, 0x10, 0x90,
-//     0x01, 0x60, 0xC6, 0x11, 0xA9, 0x01, 0xC5, 0x11, 0xF0, 0x28, 0x60, 0xE6, 0x10, 0xA9, 0x1F, 0x24, 0x10, 0xF0, 0x1F,
-//     0x60, 0xA5, 0x10, 0x18, 0x69, 0x20, 0x85, 0x10, 0xB0, 0x01, 0x60, 0xE6, 0x11, 0xA9, 0x06, 0xC5, 0x11, 0xF0, 0x0C,
-//     0x60, 0xC6, 0x10, 0xA5, 0x10, 0x29, 0x1F, 0xC9, 0x1F, 0xF0, 0x01, 0x60, 0x4C, 0x35, 0x07, 0xA0, 0x00, 0xA5, 0xFE,
-//     0x91, 0x00, 0x60, 0xA6, 0x03, 0xA9, 0x00, 0x81, 0x10, 0xA2, 0x00, 0xA9, 0x01, 0x81, 0x10, 0x60, 0xA2, 0x00, 0xEA,
-//     0xEA, 0xCA, 0xD0, 0xFB, 0x60,
-// };
-
-// uint8_t reset_vector[] = {
-//     // clang-format off
-//     0x00, 0x06,
-//     // clang-format on
-// };
-
 struct NES {
-    // enum class CartridgeType {
-    //     iNES,
-    // };
+    std::function<int()> get_random = nullptr;
 
-    cpumem::Registers cpu_registers;
-    cpu::Obj          cpu;
+    enum class Variant {
+        NTSC_2C02, // NTSC (2C02)
+        PAL_2C07,  // PAL (2C07)
+        Dendy,     // Dendy
+        RGB_2C03,  // RGB (2C03)
+        RGB_Vs_4,  // RGB (Vs. 4)
+        RGB_2C05,  // RGB (2C05)
+        _MAX
+    };
+
+    Variant variant;
+
+    constexpr uint64_t master_clock_frequency() const {
+        // From https://www.nesdev.org/wiki/Cycle_reference_chart
+        // NTSC (2C02): 21.477272 MHz ± 40 Hz, 236.25 MHz ÷ 11 by definition
+        // PAL (2C07): 26.601712 MHz ± 50 Hz 26.6017125 MHz by definition
+        // Dendy; Like PAL
+        // RGB (2C03), RGB (Vs. 4), RGB (2C05): Like NTSC
+
+        if (variant == Variant::PAL_2C07 || variant == Variant::Dendy) {
+            return 26'601'712ULL;
+        } else {
+            return 21'477'272ULL;
+        }
+    }
+
+    cpu::Obj cpu;
 
     uint8_t ram_backend[cpumem::RAM_SIZE] = {};
-
-    // uint8_t rom_backend[cpumem::PRG_ROM_SIZE] = {};
 
     std::vector<Memory>        onboard_memories;
     std::unique_ptr<Cartridge> cartridge;
@@ -88,9 +48,13 @@ struct NES {
     Bus data_bus;
     Bus write_signal;
 
-    NES()
-        : cpu_registers(), cpu(cpu_registers), address_bus("address_bus"), data_bus("data_bus"),
-          write_signal("write_signal") {
+    NES() : address_bus("address_bus"), data_bus("data_bus"), write_signal("write_signal") {
+    }
+
+    void init() {
+        address_bus.detach_all();
+        data_bus.detach_all();
+        write_signal.detach_all();
 
         this->cpu.address_bus.attach(&cpu, address_bus);
         this->cpu.data_bus.attach(&cpu, data_bus);
@@ -100,7 +64,6 @@ struct NES {
         this->onboard_memories.push_back({ram_backend, 1 * cpumem::RAM_SIZE, cpumem::RAM_SIZE});
         this->onboard_memories.push_back({ram_backend, 2 * cpumem::RAM_SIZE, cpumem::RAM_SIZE});
         this->onboard_memories.push_back({ram_backend, 3 * cpumem::RAM_SIZE, cpumem::RAM_SIZE});
-        // this->onboard_memories.push_back({rom_backend, cpumem::PRG_ROM_START, cpumem::PRG_ROM_SIZE});
 
         for (size_t i = 0; i < this->onboard_memories.size(); i += 1) {
             auto &memory = this->onboard_memories[i];
@@ -108,22 +71,7 @@ struct NES {
             memory.data_bus.attach(&memory, data_bus);
             memory.write_signal.attach(&memory, write_signal);
         }
-        // for (auto &memory : this->onboard_memories) {
-        //     memory.address_bus.attach(&memory, address_bus);
-        //     memory.data_bus.attach(&memory, data_bus);
-        //     memory.write_signal.attach(&memory, write_signal);
-        // }
-
-        reset();
-
-        // TODO : Remove this!
-        // Dump program
-        // print_mem(0x0600, ARR_LEN(program));
     }
-
-    // void save_cartridge(std::ostream os) {
-    //     (void)os;
-    // }
 
     void load_cartridge(std::vector<uint8_t> raw) {
         if (raw.size() < 16) {
@@ -155,6 +103,7 @@ struct NES {
         }
 
         // We're probably good to go at this point!
+        init();
 
         spdlog::debug("Allocating a new cartridge");
         this->cartridge = std::make_unique<Cartridge>(); // Throw old cartridge
@@ -237,19 +186,11 @@ struct NES {
 
     void reset() {
         spdlog::debug("Resetting NES");
-        memset(&cpu_registers, 0, sizeof(cpu_registers));
         memset(&ram_backend, 0, sizeof(ram_backend));
-        // cpu_registers.program_counter = 0xFFFC;
-        cpu_registers.stack_pointer      = 0xFF;
-        cpu_registers.processor_status.i = 1;
         cpu.reset();
-
-        // TODO : Remove this!
-        // cpu_write_mem(0x0600, program, ARR_LEN(program));
-        // cpu_write_mem(cpumem::RESET_VECTOR, reset_vector, ARR_LEN(reset_vector));
     }
 
-    void cycle() {
+    void main_cycle() {
         cpu.cycle();
         total_cycle_count += 1;
     }

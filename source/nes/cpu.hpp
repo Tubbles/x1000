@@ -191,18 +191,18 @@ struct Obj {
     BusHarness data_bus;
     BusHarness write_signal;
 
-    cpumem::Registers &registers;
-    State              state               = State::RESET;
-    size_t             subcycle_counter    = 0;
-    size_t             actual_subcycle_max = 0;
-    uint8_t            buffer[5];
-    size_t             cycle_count;
+    cpumem::Registers registers;
+    State             state               = State::RESET;
+    size_t            subcycle_counter    = 0;
+    size_t            actual_subcycle_max = 0;
+    uint8_t           buffer[5];
+    size_t            cycle_count;
 
     std::optional<Instruction>          current_instruction = std::nullopt;
     std::map<const char *, opcode_func> opcode_funcs;
     std::map<int, addrmode_func>        addrmode_funcs;
 
-    Obj(cpumem::Registers &registers) : address_bus("cpu"), data_bus("cpu"), write_signal("cpu"), registers(registers) {
+    Obj() : address_bus("cpu"), data_bus("cpu"), write_signal("cpu") {
         opcode_funcs[ADC] = &Obj::_op_ADC;
         opcode_funcs[AND] = &Obj::_op_AND;
         opcode_funcs[ASL] = &Obj::_op_ASL;
@@ -279,6 +279,11 @@ struct Obj {
         memset(buffer, 0, sizeof(buffer));
         cycle_count = 0;
         current_instruction.reset();
+
+        memset(&registers, 0, sizeof(registers));
+        // registers.program_counter = 0xFFFC;
+        registers.stack_pointer      = 0xFF;
+        registers.processor_status.i = 1;
     }
 
     void cycle();

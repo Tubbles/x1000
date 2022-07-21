@@ -5,8 +5,22 @@
 #include <fstream>
 #include <iterator>
 #include <locale>
+#include <spdlog/spdlog.h>
 #include <string>
 #include <vector>
+
+// Assert that is always tested carried out
+inline void release_assert_function(bool test, const char *test_string, const char *message, const char *func,
+                                    const char *file, const int line) {
+    if (!test) {
+        spdlog::critical("{}", message);
+        spdlog::critical("{} in {}@{}: assert \"{}\" failed", func, file, line, test_string);
+        exit(1);
+    }
+}
+
+#define release_assert(expression, message)                                                                            \
+    release_assert_function(expression, #expression, message, __FUNCTION__, __FILE__, __LINE__);
 
 #define ARR_LEN(x) ((sizeof(x) / sizeof(0 [x])) / ((size_t)(!(sizeof(x) % sizeof(0 [x])))))
 

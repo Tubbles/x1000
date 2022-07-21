@@ -17,5 +17,6 @@ class helloRecipe(ConanFile):
     requires = [
         # "fmt/8.1.1",
         # "sdl/2.0.20",
+        "argparse/2.6",
     ]
     generators = "cmake", "gcc", "txt"

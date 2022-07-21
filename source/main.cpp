@@ -3,22 +3,21 @@
 #include "render.hpp"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
+#include <argparse/argparse.hpp>
 #include <chrono>
 #include <fmt/core.h>
 #include <numeric>
+#include <random>
 #include <spdlog/spdlog.h>
 #include <vector>
-
-#include <random>
 
 std::random_device                                       random_device;
 std::mt19937                                             random_number_generator(random_device());
 std::uniform_int_distribution<std::mt19937::result_type> distribution(0x00, 0xFF);
 
-enum {
-    SYS_RANDOM  = 0x00FE,
-    SYS_LASTKEY = 0x00FF,
-};
+static auto get_random() {
+    return distribution(random_number_generator);
+}
 
 auto get_current_time = std::chrono::steady_clock::now;
 using delta_time      = std::chrono::duration<float>;
@@ -45,13 +44,9 @@ int main(int argc, char *argv[]) {
     // Point         target_frame_size = {32, 32};
     Point target_frame_size = {256, 240}; // NES
 
-#ifdef NDEBUG
-    spdlog::set_level(spdlog::level::warn); // Set global log level
-#else
-    // spdlog::set_level(spdlog::level::debug); // Set global log level
-
-    spdlog::set_level(spdlog::level::trace); // Set global log level
-#endif
+    // spdlog::set_level(spdlog::level::warn); // Set global log level
+    spdlog::set_level(spdlog::level::debug); // Set global log level
+    // spdlog::set_level(spdlog::level::trace); // Set global log level
 
     SDL_Init(SDL_INIT_EVERYTHING);
     TTF_Init();
@@ -90,13 +85,14 @@ int main(int argc, char *argv[]) {
     };
 
     NES nes;
+    nes.get_random = get_random;
     nes.load_cartridge(binary_file_to_vector("/home/monkey/dev/x1000/test/nes/nestest/nestest.nes"));
 
     // static constexpr Point  origin{110, 10};
-    static constexpr int frame_length = 32;
+    // static constexpr int frame_length = 32;
 
-    static const Point origin{width / (2 * pixel_size) - (frame_length / 2),
-                              height / (2 * pixel_size) - (frame_length / 2)};
+    // static const Point origin{width / (2 * pixel_size) - (frame_length / 2),
+    //                           height / (2 * pixel_size) - (frame_length / 2)};
 
     static const Point nes_origin{width / (2 * pixel_size) - (target_frame_size.x / 2),
                                   height / (2 * pixel_size) - (target_frame_size.y / 2)};
@@ -130,11 +126,11 @@ int main(int argc, char *argv[]) {
                 if ((event.key.keysym.sym == SDLK_r) && (event.key.keysym.mod & KMOD_CTRL)) {
                     nes.reset();
                 }
-                if ((event.key.keysym.sym == SDLK_w) || (event.key.keysym.sym == SDLK_a) ||
-                    (event.key.keysym.sym == SDLK_s) || (event.key.keysym.sym == SDLK_d)) {
-                    nes.ram_backend[SYS_LASTKEY] = event.key.keysym.sym;
-                    // spdlog::debug("Keypress: {:02X}", nes.ram_backend[SYS_LASTKEY]);
-                }
+                // if ((event.key.keysym.sym == SDLK_w) || (event.key.keysym.sym == SDLK_a) ||
+                //     (event.key.keysym.sym == SDLK_s) || (event.key.keysym.sym == SDLK_d)) {
+                //     nes.ram_backend[SYS_LASTKEY] = event.key.keysym.sym;
+                //     // spdlog::debug("Keypress: {:02X}", nes.ram_backend[SYS_LASTKEY]);
+                // }
                 break;
             }
             case SDL_QUIT: {
@@ -151,11 +147,12 @@ int main(int argc, char *argv[]) {
         // 1789.7725 kHz
         // 1789772.5 Hz
         // Loop = 1/60 s = 60 Hz, 1789772.5 / 60 ~ 29830
+        // constexpr const size_t nes_loops = 1;
         // constexpr const size_t nes_loops = 1250;
         constexpr const size_t nes_loops = 29830;
         for (size_t i = 0; i < nes_loops; i += 1) {
-            // nes.ram_backend[SYS_RANDOM] = distribution(random_number_generator);
-            nes.cycle();
+            // nes.ram_backend[SYS_RANDOM] = get_random();
+            nes.main_cycle();
             // if (nes.cpu.state == cpu::Obj::State::HALT) {
             //     nes.reset();
             // }

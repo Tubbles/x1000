@@ -16,15 +16,22 @@ struct Bus {
 
     Bus(const char *name) : name(name) {
     }
+
+    void detach_all();
 };
 
 struct BusHarness {
     std::optional<Bus *> bus                                = std::nullopt;
     const char          *owner_name                         = "unknown";
     bool (*bus_level_updated)(void *self, size_t bus_level) = nullptr;
+    size_t lower_threshold                                  = std::numeric_limits<size_t>::min(); // inclusive
+    size_t upper_threshold                                  = std::numeric_limits<size_t>::max(); // inclusive
 
-    BusHarness(const char *owner_name, bool (*bus_level_updated)(void *self, size_t bus_level) = nullptr)
-        : owner_name(owner_name), bus_level_updated(bus_level_updated) {
+    BusHarness(const char *owner_name, bool (*bus_level_updated)(void *self, size_t bus_level) = nullptr,
+               size_t      lower_threshold = std::numeric_limits<size_t>::min(),
+               size_t      upper_threshold = std::numeric_limits<size_t>::max())
+        : owner_name(owner_name), bus_level_updated(bus_level_updated), lower_threshold(lower_threshold),
+          upper_threshold(upper_threshold) {
     }
 
     // void set_callback() {
@@ -53,14 +60,17 @@ struct BusHarness {
         // bool was_received_total = false;
         for (size_t i = 0; i < bus->harnesses.size(); i += 1) {
             auto [self, harness] = bus->harnesses[i];
-            // spdlog::debug("Trying bus_level_updated in {}, has callback: {}", harness->owner_name,
-            //               (harness->bus_level_updated != nullptr));
+            // spdlog::debug("Trying bus_level_updated in {}, has callback: {}, ({:X},{:X})", harness->owner_name,
+            //               (harness->bus_level_updated != nullptr, harness->lower_threshold,
+            //               harness->upper_threshold));
             if (harness != this && harness->bus_level_updated) {
-                harness->bus_level_updated(self, level);
-                // auto was_received_this = harness->bus_level_updated(self, level);
-                // if (!was_received_total && was_received_this) {
-                //     was_received_total = true;
-                // }
+                if ((level >= harness->lower_threshold) && (level <= harness->upper_threshold)) {
+                    harness->bus_level_updated(self, level);
+                    // auto was_received_this = harness->bus_level_updated(self, level);
+                    // if (!was_received_total && was_received_this) {
+                    //     was_received_total = true;
+                    // }
+                }
             }
         }
         // if (!was_received_total) {
