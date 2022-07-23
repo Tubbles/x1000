@@ -13,6 +13,9 @@
         "cstdlib": "cpp",
         "*.tcc": "cpp",
         "cmath": "cpp",
-        "limits": "cpp"
+        "limits": "cpp",
+        "*.ipp": "cpp",
+        "bitset": "cpp",
+        "bufferobject": "cpp"
     }
 }

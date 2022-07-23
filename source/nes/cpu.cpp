@@ -3,12 +3,21 @@
 #include <spdlog/spdlog.h>
 
 namespace cpu {
+
+const Instruction *Instruction::lut[256] = {};
+
 ::std::optional<Instruction> Instruction::decode(uint8_t opcode) {
-    for (auto instr : instructions) {
-        if (instr.opcode == opcode) {
-            return instr;
-        }
+    // for (auto instr : instructions) {
+    //     if (instr.opcode == opcode) {
+    //         return instr;
+    //     }
+    // }
+
+    auto *instr = Instruction::lut[opcode];
+    if (instr) {
+        return *instr;
     }
+
     return ::std::nullopt;
 }
 
@@ -33,11 +42,15 @@ void Obj::cycle() {
     case State::RUN: {
         if (!current_instruction.has_value()) {
             // Grab next instruction
-            spdlog::trace("cpu: {} Grab next instruction @ {:04X}", subcycle_counter, registers.program_counter);
+            if (spdlog::get_level() <= spdlog::level::trace) {
+                spdlog::trace("cpu: {} Grab next instruction @ {:04X}", subcycle_counter, registers.program_counter);
+            }
             buffer[0] = _read(registers.program_counter);
-            spdlog::trace("cpu: {} Current registers: A={:02X} X={:02X} Y={:02X} S={:02X} P=[{}]", subcycle_counter,
-                          registers.accumulator, registers.index_register_x, registers.index_register_y,
-                          registers.stack_pointer, ps_to_string(registers.processor_status));
+            if (spdlog::get_level() <= spdlog::level::trace) {
+                spdlog::trace("cpu: {} Current registers: A={:02X} X={:02X} Y={:02X} S={:02X} P=[{}]", subcycle_counter,
+                              registers.accumulator, registers.index_register_x, registers.index_register_y,
+                              registers.stack_pointer, ps_to_string(registers.processor_status));
+            }
             current_instruction = Instruction::decode(buffer[0]);
             subcycle_counter    = 1;
             if (current_instruction.has_value()) {
@@ -62,19 +75,22 @@ void Obj::cycle() {
 
         } else {
             // Execute opcode callback
-            auto       &instr  = current_instruction.value();
-            const auto &mnem   = instr.mnemonic;
-            std::string bufstr = "";
-            for (size_t i = 0; i < instr.num_args; i += 1) {
-                bufstr += fmt::format(" {:02X}", buffer[i]);
+            auto       &instr = current_instruction.value();
+            const auto &mnem  = instr.mnemonic;
+
+            if (spdlog::get_level() <= spdlog::level::trace) {
+                std::string bufstr = "";
+                for (size_t i = 0; i < instr.num_args; i += 1) {
+                    bufstr += fmt::format(" {:02X}", buffer[i]);
+                }
+                trim(bufstr);
+                spdlog::trace("cpu: {} Exec {},{} [{}]", subcycle_counter, opcode_to_string(mnem),
+                              addrmode_to_string(instr.addr_mode), bufstr);
             }
-            trim(bufstr);
-            spdlog::trace("cpu: {} Exec {},{} [{}]", subcycle_counter, mnem, addrmode_to_string(instr.addr_mode),
-                          bufstr);
-            auto ok = (*this.*opcode_funcs[instr.mnemonic])(instr);
+            auto ok = (*this.*opcode_funcs[(size_t)instr.mnemonic])(instr);
             if (!ok) {
-                spdlog::error("CPU (@{}) OpCode not implemented or undefined: {},{}", cycle_count, mnem,
-                              addrmode_to_string(instr.addr_mode));
+                spdlog::error("CPU (@{}) OpCode not implemented or undefined: {},{}", cycle_count,
+                              opcode_to_string(mnem), addrmode_to_string(instr.addr_mode));
                 state = State::HALT;
             }
             subcycle_counter += 1;
@@ -311,7 +327,7 @@ bool Obj::_op_ADC(Instruction &instr) {
         }
     } else {
         spdlog::error("CPU (@{}) Decimal mode not implemented for {},{}", cycle_count,
-                      current_instruction.value().mnemonic, current_instruction.value().addr_mode);
+                      opcode_to_string(current_instruction.value().mnemonic), current_instruction.value().addr_mode);
         return false;
     }
 
@@ -1592,7 +1608,7 @@ bool Obj::_op_SBC(Instruction &instr) {
         }
     } else {
         spdlog::error("CPU (@{}) Decimal mode not implemented for {},{}", cycle_count,
-                      current_instruction.value().mnemonic, current_instruction.value().addr_mode);
+                      opcode_to_string(current_instruction.value().mnemonic), current_instruction.value().addr_mode);
         return false;
     }
 

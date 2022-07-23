@@ -30,6 +30,18 @@ set(common_definitions
     SPDLOG_FMT_EXTERNAL
 )
 
+set(common_include_directories
+    ${CMAKE_SOURCE_DIR}
+)
+
+set(common_flags
+    -Wall
+    -Wextra
+    -pedantic
+    # -Werror
+    -pg
+)
+
 set(common_libraries
     fmt
     ${SDL2_LIBRARIES}
@@ -37,10 +49,6 @@ set(common_libraries
     Catch2::Catch2
     spdlog::spdlog
     CONAN_PKG::argparse
-)
-
-set(common_include_directories
-    ${CMAKE_SOURCE_DIR}
 )
 
 # Set up main application
@@ -58,10 +66,11 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 )
 
 target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE
-    -Wall
-    -Wextra
-    -pedantic
-    # -Werror
+    ${common_flags}
+)
+
+target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
+    ${common_flags}
 )
 
 target_link_libraries(${CMAKE_PROJECT_NAME}
@@ -84,10 +93,11 @@ target_include_directories(${CMAKE_PROJECT_NAME}_test PRIVATE
 )
 
 target_compile_options(${CMAKE_PROJECT_NAME}_test PRIVATE
-    -Wall
-    -Wextra
-    -pedantic
-    # -Werror
+    ${common_flags}
+)
+
+target_link_options(${CMAKE_PROJECT_NAME}_test PRIVATE
+    ${common_flags}
 )
 
 target_link_libraries(${CMAKE_PROJECT_NAME}_test

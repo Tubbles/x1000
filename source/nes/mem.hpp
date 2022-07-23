@@ -50,9 +50,8 @@ struct Memory {
 
     Memory(uint8_t *backend, size_t address_start, size_t size, bool writeable = true)
         : backend(backend), address_start(address_start), size(size), writeable(writeable),
-          name(fmt::format("memory@{:04X}", address_start)),
-          address_bus(name.c_str(), bus_level_updated, address_start, address_start + size - 1),
-          data_bus(name.c_str(), bus_level_updated), write_signal(name.c_str(), bus_level_updated) {
+          name(fmt::format("memory@{:04X}", address_start)), address_bus(name, bus_level_updated),
+          data_bus(name, bus_level_updated), write_signal(name, bus_level_updated) {
         // address_bus.set_callback(bus_level_updated);
         // data_bus.set_callback(bus_level_updated);
         // write_signal.set_callback(bus_level_updated);

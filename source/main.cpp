@@ -6,6 +6,7 @@
 #include <argparse/argparse.hpp>
 #include <chrono>
 #include <fmt/core.h>
+#include <functional>
 #include <numeric>
 #include <random>
 #include <spdlog/spdlog.h>
@@ -15,7 +16,7 @@ std::random_device                                       random_device;
 std::mt19937                                             random_number_generator(random_device());
 std::uniform_int_distribution<std::mt19937::result_type> distribution(0x00, 0xFF);
 
-static auto get_random() {
+static int get_random() {
     return distribution(random_number_generator);
 }
 
@@ -58,7 +59,8 @@ int main(int argc, char *argv[]) {
     SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED_DISPLAY(num_displays - 1),
                           SDL_WINDOWPOS_CENTERED_DISPLAY(num_displays - 1));
     SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
-    SDL_RenderSetVSync(renderer, true);
+    // SDL_RenderSetVSync(renderer, true);
+    SDL_RenderSetVSync(renderer, false);
     SDL_GetWindowSize(window, &width, &height);
 
     pixel_size = std::min((int)std::floor(((float)width) / ((float)target_frame_size.x)),

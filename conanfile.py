@@ -1,8 +1,8 @@
 from conan import ConanFile
 
 
-class helloRecipe(ConanFile):
-    name = "hello"
+class app(ConanFile):
+    name = "x1000"
     version = "1.0"
     package_type = "application"
 

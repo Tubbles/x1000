@@ -10,10 +10,10 @@
                 "TEST",
                 "SPDLOG_FMT_EXTERNAL"
             ],
-            "compilerPath": "/usr/bin/clang",
-            "cStandard": "c17",
-            "cppStandard": "c++20",
-            "intelliSenseMode": "clang-x64"
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c18",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "gcc-x64"
         }
     ],
     "version": 4

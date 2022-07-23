@@ -8,7 +8,7 @@ my_dir="$(dirname "$(realpath "$0")")"
 : "${conan_dir:="${HOME}/.conan"}"
 
 if [[ "${use_docker}" == "yes" ]]; then
-    if $(command -v docker &>/dev/null); then
+    if command -v docker &>/dev/null; then
         echo "$0: Info: Using docker for build.."
         exec "${my_dir}/docker-run.sh" "$0" "$@"
     fi
@@ -38,10 +38,10 @@ if [[ "${use_conan_venv}" == "yes" ]]; then
         conan profile show default
         echo "$0 Info: Please double check that the settings are correct and re-run this script"
         echo "$0 Info: If you need to make changes, edit the file ${conan_dir}/profiles/default"
-        exit
+        exit 1
     fi
 fi
 
 conan install .. --build=missing &&
-    CMAKE_BUILD_TYPE=Release cmake .. -G Ninja &&
+    CMAKE_BUILD_TYPE=Debug cmake .. -G Ninja &&
     ninja "$@"
