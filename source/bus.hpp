@@ -22,8 +22,8 @@ struct Bus {
 };
 
 struct BusHarness {
-    std::optional<Bus *> bus                                = std::nullopt;
-    std::string          owner_name                         = "unknown";
+    Bus        *bus                                         = nullptr;
+    std::string owner_name                                  = "unknown";
     bool (*bus_level_updated)(void *self, size_t bus_level) = nullptr;
 
     BusHarness(std::string owner_name, bool (*bus_level_updated)(void *self, size_t bus_level) = nullptr)
@@ -36,7 +36,7 @@ struct BusHarness {
     // }
 
     void attach(void *self, Bus &bus) {
-        assert(!this->bus.has_value());
+        assert(!this->bus);
         this->bus = &bus;
         bus.harnesses.push_back(std::make_tuple(self, this));
         spdlog::debug("Attaching {} to {} (total {} harnesses), has callback: {}", this->owner_name, bus.name,
@@ -44,16 +44,13 @@ struct BusHarness {
     }
 
     size_t get() {
-        assert(this->bus.has_value());
-        return this->bus.value()->level;
+        return this->bus->level;
     }
 
     void put(size_t level) {
-        assert(this->bus.has_value());
-        auto *bus  = this->bus.value();
+        auto *bus  = this->bus;
         bus->level = level;
         // spdlog::trace("Bus {} put @ {} : {:02} ({:02X})", bus->name, this->owner_name, level, level);
-        // bool was_received_total = false;
         for (size_t i = 0; i < bus->harnesses.size(); i += 1) {
             auto &[self, harness] = bus->harnesses[i];
             // spdlog::debug("Trying bus_level_updated in {}, has callback: {}, ({:X},{:X})", harness->owner_name,
@@ -61,15 +58,7 @@ struct BusHarness {
             //               harness->upper_threshold));
             if (harness != this && harness->bus_level_updated) {
                 harness->bus_level_updated(self, level);
-                // auto was_received_this = harness->bus_level_updated(self, level);
-                // if (!was_received_total && was_received_this) {
-                //     was_received_total = true;
-                // }
             }
         }
-        // if (!was_received_total) {
-        //     spdlog::trace("Bus {} put @ {} : {:02} ({:02X}) HAD NO RECEIVER", bus->name, this->owner_name, level,
-        //                   level);
-        // }
     }
 };

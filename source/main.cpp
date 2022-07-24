@@ -12,6 +12,8 @@
 #include <spdlog/spdlog.h>
 #include <vector>
 
+using namespace std::chrono_literals;
+
 std::random_device                                       random_device;
 std::mt19937                                             random_number_generator(random_device());
 std::uniform_int_distribution<std::mt19937::result_type> distribution(0x00, 0xFF);
@@ -79,8 +81,6 @@ int main(int argc, char *argv[]) {
     std::vector<delta_time> frame_times;
     float                   fps = 0.0f;
 
-    auto total_time = get_current_time();
-
     constexpr const uint32_t color_palette[] = {
         0x000000, 0xFFFFFF, 0x880000, 0xAAFFEE, 0xCC44CC, 0x00CC55, 0x0000AA, 0xEEEE77,
         0xDD8855, 0x664400, 0xFF7777, 0x333333, 0x777777, 0xAAFF66, 0x0088FF, 0xBBBBBB,
@@ -99,22 +99,28 @@ int main(int argc, char *argv[]) {
     static const Point nes_origin{width / (2 * pixel_size) - (target_frame_size.x / 2),
                                   height / (2 * pixel_size) - (target_frame_size.y / 2)};
 
+    auto previous_fps_timestamp = std::chrono::system_clock::now();
+    auto total_time             = get_current_time();
+
     while (running) {
         auto new_total_time = get_current_time();
         auto delta_time     = new_total_time - total_time;
         total_time          = new_total_time;
-
         frame_times.push_back(delta_time);
-        constexpr int num_frames_window = 60;
-        if (frame_times.size() == num_frames_window) {
-            fps =
-                1.0f / (std::accumulate(frame_times.begin(), frame_times.end(), decltype(frame_times)::value_type(0)) /
-                        num_frames_window)
-                           .count();
+
+        auto current_fps_timestamp = std::chrono::system_clock::now();
+        if (current_fps_timestamp - previous_fps_timestamp > 0.5s) {
+            auto sum_frame_times =
+                std::accumulate(frame_times.begin(), frame_times.end(), decltype(frame_times)::value_type(0));
+
+            fps = 1.0f / (sum_frame_times.count() / frame_times.size());
+
             frame_times.clear();
             // spdlog::debug("FPS: {:.2F}", fps);
             // spdlog::debug("{}x{}", (width / pixel_size), (height / pixel_size));
             // spdlog::debug("Origin: {}x{}", origin.x, origin.y);
+
+            previous_fps_timestamp = current_fps_timestamp;
         }
 
         frame_count += 1;

@@ -16,6 +16,8 @@
         "limits": "cpp",
         "*.ipp": "cpp",
         "bitset": "cpp",
-        "bufferobject": "cpp"
+        "bufferobject": "cpp",
+        "typeindex": "cpp",
+        "typeinfo": "cpp"
     }
 }

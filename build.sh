@@ -43,5 +43,5 @@ if [[ "${use_conan_venv}" == "yes" ]]; then
 fi
 
 conan install .. --build=missing &&
-    CMAKE_BUILD_TYPE=Debug cmake .. -G Ninja &&
+    CMAKE_BUILD_TYPE=Release cmake .. -G Ninja &&
     ninja "$@"
