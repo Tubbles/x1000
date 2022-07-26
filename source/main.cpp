@@ -1,26 +1,22 @@
+#include "gamepad.hpp"
 #include "globals.hpp"
-#include "nes/nes.hpp"
+#include "nes_main.hpp"
 #include "render.hpp"
+#include "snake_main.hpp"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 #include <argparse/argparse.hpp>
 #include <chrono>
 #include <fmt/core.h>
 #include <functional>
+#include <map>
 #include <numeric>
-#include <random>
 #include <spdlog/spdlog.h>
 #include <vector>
 
+#include <SDL2/SDL_gamecontroller.h>
+
 using namespace std::chrono_literals;
-
-std::random_device                                       random_device;
-std::mt19937                                             random_number_generator(random_device());
-std::uniform_int_distribution<std::mt19937::result_type> distribution(0x00, 0xFF);
-
-static int get_random() {
-    return distribution(random_number_generator);
-}
 
 auto get_current_time = std::chrono::steady_clock::now;
 using delta_time      = std::chrono::duration<float>;
@@ -48,7 +44,8 @@ int main(int argc, char *argv[]) {
     Point target_frame_size = {256, 240}; // NES
 
     // spdlog::set_level(spdlog::level::warn); // Set global log level
-    spdlog::set_level(spdlog::level::debug); // Set global log level
+    spdlog::set_level(spdlog::level::info); // Set global log level
+    // spdlog::set_level(spdlog::level::debug); // Set global log level
     // spdlog::set_level(spdlog::level::trace); // Set global log level
 
     SDL_Init(SDL_INIT_EVERYTHING);
@@ -86,10 +83,6 @@ int main(int argc, char *argv[]) {
         0xDD8855, 0x664400, 0xFF7777, 0x333333, 0x777777, 0xAAFF66, 0x0088FF, 0xBBBBBB,
     };
 
-    NES nes;
-    nes.get_random = get_random;
-    nes.load_cartridge(binary_file_to_vector("/home/monkey/dev/x1000/test/nes/nestest/nestest.nes"));
-
     // static constexpr Point  origin{110, 10};
     // static constexpr int frame_length = 32;
 
@@ -101,6 +94,14 @@ int main(int argc, char *argv[]) {
 
     auto previous_fps_timestamp = std::chrono::system_clock::now();
     auto total_time             = get_current_time();
+
+    std::vector<Gamepad>                gamepads(16);
+    std::map<SDL_JoystickID, Gamepad *> jids_to_gamepad;
+
+    // nes::setup();
+    snake::setup();
+
+    RealPoint blip_coords{0.0, 0.0};
 
     while (running) {
         auto new_total_time = get_current_time();
@@ -125,46 +126,113 @@ int main(int argc, char *argv[]) {
 
         frame_count += 1;
 
+        int gamepad_active = -1;
+
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
             case SDL_KEYDOWN: {
-                if ((event.key.keysym.sym == SDLK_q) && (event.key.keysym.mod & KMOD_CTRL)) {
+                if ((event.key.keysym.scancode == SDL_SCANCODE_Q) && (event.key.keysym.mod & KMOD_CTRL)) {
                     running = false;
                 }
-                if ((event.key.keysym.sym == SDLK_r) && (event.key.keysym.mod & KMOD_CTRL)) {
-                    nes.reset();
-                }
-                // if ((event.key.keysym.sym == SDLK_w) || (event.key.keysym.sym == SDLK_a) ||
-                //     (event.key.keysym.sym == SDLK_s) || (event.key.keysym.sym == SDLK_d)) {
-                //     nes.ram_backend[SYS_LASTKEY] = event.key.keysym.sym;
+                // if ((event.key.keysym.scancode == SDL_SCANCODE_W) || (event.key.keysym.scancode == SDL_SCANCODE_A)
+                // ||
+                //     (event.key.keysym.scancode == SDL_SCANCODE_S) || (event.key.keysym.scancode == SDL_SCANCODE_D))
+                //     { nes.ram_backend[SYS_LASTKEY] = event.key.keysym.scancode;
                 //     // spdlog::debug("Keypress: {:02X}", nes.ram_backend[SYS_LASTKEY]);
                 // }
+                // nes::keyboard_event(event.key);
+                snake::keyboard_event(event.key);
+                break;
+            }
+            case SDL_CONTROLLERBUTTONDOWN: {
+                if (event.cbutton.button == SDL_CONTROLLER_BUTTON_GUIDE) {
+                    running = false;
+                }
+                break;
+            }
+            case SDL_CONTROLLERDEVICEADDED: {
+                SDL_ControllerDeviceEvent &cdevice = event.cdevice;
+                spdlog::info("SDL_CONTROLLERDEVICEADDED, which: {}", cdevice.which);
+                spdlog::info("Allocating gamepad {} from joystick", cdevice.which);
+                auto &pad = gamepads[cdevice.which];
+                pad.init(cdevice.which);
+                spdlog::info("name: {}", SDL_GameControllerName(pad.controller));
+                spdlog::info("haptics: {} trigger_haptics: {} accel: {} gyro: {}", pad.haptics_supported,
+                             pad.trigger_haptics_supported, pad.accel_supported, pad.gyro_supported);
+                jids_to_gamepad[SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad.controller))] = &pad;
+                break;
+            }
+            case SDL_CONTROLLERDEVICEREMOVED: {
+                SDL_ControllerDeviceEvent &cdevice = event.cdevice;
+                auto                      &pad     = *jids_to_gamepad[cdevice.which];
+                spdlog::info("SDL_CONTROLLERDEVICEREMOVED, which: {}", pad.index);
+                spdlog::info("Deallocating gamepad {} from joystick", pad.index);
+                pad.deinit();
                 break;
             }
             case SDL_QUIT: {
                 running = false;
                 break;
             }
+
+            case SDL_WINDOWEVENT:
+                [[fallthrough]];
+            case SDL_KEYUP:
+                [[fallthrough]];
+            case SDL_TEXTINPUT:
+                [[fallthrough]];
+            case SDL_MOUSEMOTION:
+                [[fallthrough]];
+            case SDL_MOUSEBUTTONDOWN:
+                [[fallthrough]];
+            case SDL_MOUSEBUTTONUP:
+                [[fallthrough]];
+            case SDL_JOYAXISMOTION:
+                [[fallthrough]];
+            case SDL_JOYBUTTONDOWN:
+                [[fallthrough]];
+            case SDL_JOYBUTTONUP:
+                [[fallthrough]];
+            case SDL_JOYDEVICEADDED:
+                [[fallthrough]];
+            case SDL_JOYDEVICEREMOVED:
+                [[fallthrough]];
+            case SDL_CONTROLLERAXISMOTION:
+                [[fallthrough]];
+            case SDL_CONTROLLERBUTTONUP:
+                [[fallthrough]];
+            case SDL_AUDIODEVICEADDED: {
+                // TODO
+                break;
+            }
             default: {
+                // spdlog::info("Unhandled SDL event: 0x{:X}", event.type);
                 break;
             }
             }
         }
 
-        // 1.7897725 MHz
-        // 1789.7725 kHz
-        // 1789772.5 Hz
-        // Loop = 1/60 s = 60 Hz, 1789772.5 / 60 ~ 29830
-        // constexpr const size_t nes_loops = 1;
-        // constexpr const size_t nes_loops = 1250;
-        constexpr const size_t nes_loops = 29830;
-        for (size_t i = 0; i < nes_loops; i += 1) {
-            // nes.ram_backend[SYS_RANDOM] = get_random();
-            nes.main_cycle();
-            // if (nes.cpu.state == cpu::Obj::State::HALT) {
-            //     nes.reset();
-            // }
+        int index = 0;
+        for (auto &gamepad : gamepads) {
+            gamepad.poll_state();
+            if (gamepad.controller) {
+                static const double speed = 0.05;
+                blip_coords.x += (double)(gamepad.state.dpad_right - gamepad.state.dpad_left) * speed;
+                blip_coords.y += (double)(gamepad.state.dpad_down - gamepad.state.dpad_up) * speed;
+                blip_coords.x  = std::clamp(blip_coords.x, 0.0, (double)target_frame_size.x - 1);
+                blip_coords.y  = std::clamp(blip_coords.y, 0.0, (double)target_frame_size.y - 1);
+                gamepad_active = index;
+            }
+
+            if (gamepad.haptics_supported && ((int)blip_coords.x > target_frame_size.x)) {
+                SDL_GameControllerRumble(gamepad.controller, 0xFFFF, 0xFFFF, 1000);
+            }
+
+            index += 1;
         }
+
+        // nes::update();
+        snake::update();
 
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         SDL_RenderClear(renderer);
@@ -207,9 +275,18 @@ int main(int argc, char *argv[]) {
 
         // Paint FPS counter and resolution
         SDL_SetRenderDrawColor(renderer, cr(color_palette[15]), cg(color_palette[15]), cb(color_palette[15]), 255);
-        render_text(fmt::format("FPS: {:.2F}", fps).c_str(), {0, 0}, *renderer);
-        render_text(fmt::format("{}x{}", (width / pixel_size), (height / pixel_size)).c_str(), {0, 14}, *renderer);
-        render_text(fmt::format("Pixelsize: {}", pixel_size).c_str(), {0, 28}, *renderer);
+        int top = 0;
+        render_text(fmt::format("FPS: {:.2F}", fps).c_str(), {0, top}, *renderer);
+        top += 14;
+        render_text(fmt::format("{}x{}", (width / pixel_size), (height / pixel_size)).c_str(), {0, top}, *renderer);
+        top += 14;
+        render_text(fmt::format("Pixelsize: {}", pixel_size).c_str(), {0, top}, *renderer);
+        top += 14;
+        render_text(fmt::format("GP: {}", gamepad_active).c_str(), {0, top}, *renderer);
+
+        // Paint the blip
+        SDL_SetRenderDrawColor(renderer, cr(color_palette[13]), cg(color_palette[13]), cb(color_palette[13]), 255);
+        render_pixel({((int)blip_coords.x) + nes_origin.x, ((int)blip_coords.y) + nes_origin.y}, *renderer);
 
         SDL_RenderPresent(renderer);
     }

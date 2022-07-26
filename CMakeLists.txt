@@ -18,11 +18,13 @@ find_package(spdlog REQUIRED)
 set(common_sources
     source/bus.cpp
     source/globals.cpp
+    source/nes_main.cpp
     source/nes/apu.cpp
     source/nes/cpu.cpp
     source/nes/mem.cpp
     source/nes/ppu.cpp
     source/render.cpp
+    source/snake_main.cpp
     source/util.cpp
 )
 

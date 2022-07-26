@@ -16,7 +16,37 @@
             "group": {
                 "kind": "build",
                 "isDefault": true
-            }
-        }
+            },
+        },
+        {
+            "type": "shell",
+            "label": "C/C++: g++ debug build all and run",
+            "command": "./build.sh && ./build/bin/x1000",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+        },
+        {
+            "type": "shell",
+            "label": "C/C++: g++ clean all",
+            "command": "rm -fr build",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+        },
     ]
 }
